@@ -11,8 +11,12 @@ return Application::configure(basePath: dirname(__DIR__))
         channels: __DIR__.'/../routes/channels.php',
         health: '/up',
     )
-    ->withMiddleware(function (Middleware $middleware): void {
-        //
+   ->withMiddleware(function (Middleware $middleware) {
+        $middleware->validateCsrfTokens(except: [
+            '/twilio/incoming',
+            '/twilio/question',
+            '/twilio/handle',
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
