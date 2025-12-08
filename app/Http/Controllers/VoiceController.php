@@ -9,34 +9,6 @@ use OpenAI\Laravel\Facades\OpenAI as OpenAIClient;
 
 class VoiceController extends Controller
 {
-    /*
-    |--------------------------------------------------------------------------
-    | Personality Engine (OPTION C)
-    |--------------------------------------------------------------------------
-    | Makes the caller feel like a real human speaking.
-    | Adds natural pauses, fillers, soft tone, and conversational flow.
-    */
-    private function humanize($text)
-    {
-        $fillers = [
-            "okay, um, ",
-            "alright, so ",
-            "hmm, let me think, ",
-            "yeah, sure, ",
-            "got it, ",
-            "okay, just a sec… ",
-        ];
-
-        $prefix = $fillers[array_rand($fillers)];
-        return $prefix . $text;
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Incoming Call
-    |--------------------------------------------------------------------------
-    */
     public function incoming()
     {
         $resp = new VoiceResponse();
@@ -47,22 +19,12 @@ class VoiceController extends Controller
             ['phone' => request('From')]
         );
 
-        $resp->say(
-            $this->humanize("Hi there! I'm Joanna. Thanks for picking up."),
-            ['voice' => 'Polly.Joanna']
-        );
-
+        $resp->say('Hello, I am Polly Joanna.', ['voice' => 'Polly.Joanna']);
         $resp->redirect(route('twilio.question', ['q' => 1, 'sid' => $sid]));
 
         return response($resp, 200)->header('Content-Type', 'text/xml');
     }
 
-
-    /*
-    |--------------------------------------------------------------------------
-    | Ask Question
-    |--------------------------------------------------------------------------
-    */
     public function question()
     {
         $q   = (int) request('q');
@@ -71,9 +33,9 @@ class VoiceController extends Controller
         $resp = new VoiceResponse();
 
         $prompts = [
-            1 => "Could you please tell me your full name?",
-            2 => "Alright, now I just need your email. Please spell it out slowly, one character at a time.",
-            3 => "And lastly, may I have your phone number, one digit at a time please?"
+            1 => 'May I have your full name, please?',
+            2 => 'Please spell your email address, one character at a time. For example: a l e x dot j o h n s o n at g m a i l dot c o m',
+            3 => 'Please say your phone number, one digit at a time. For example: 5 5 5 1 2 3 4 5 6 7',
         ];
 
         $gather = $resp->gather([
@@ -84,56 +46,60 @@ class VoiceController extends Controller
             'method' => 'POST',
         ]);
 
-        $gather->say(
-            $this->humanize($prompts[$q]),
-            ['voice' => 'Polly.Joanna']
-        );
+        $gather->say($prompts[$q], ['voice' => 'Polly.Joanna']);
 
         return response($resp, 200)->header('Content-Type', 'text/xml');
     }
 
-
-    /*
-    |--------------------------------------------------------------------------
-    | Handle Speech Capture
-    |--------------------------------------------------------------------------
-    */
     public function handle(Request $request)
     {
-        $resp = new VoiceResponse();
+        $resp = new \Twilio\TwiML\VoiceResponse();
 
         try {
             $q      = (int) $request->input('q');
             $sid    = $request->input('sid');
             $speech = trim((string) $request->input('SpeechResult'));
 
-            \Log::info(" RAW SPEECH", compact('sid', 'q', 'speech'));
+            \Log::info("📢 RAW SPEECH", [
+                'sid' => $sid,
+                'q' => $q,
+                'speech' => $speech,
+            ]);
 
-            SurveyCall::where('call_sid', $sid)->update(["q{$q}_speech" => $speech]);
+            // Save raw transcript
+            SurveyCall::where('call_sid', $sid)
+                ->update(["q{$q}_speech" => $speech]);
 
             if (!$speech) {
-                $resp->say($this->humanize("Hmm, I didn't quite catch that. Let's give it another try."));
-                $resp->redirect(route('twilio.question', compact('q', 'sid')));
+                $resp->say("I did not hear anything. Let's try again." , ['voice' => 'Polly.Joanna']);
+                $resp->redirect(route('twilio.question', ['q' => $q, 'sid' => $sid]));
                 return response($resp, 200)->header('Content-Type', 'text/xml');
             }
 
             $answer = $speech;
 
+            // ------------------ Email reconstruction ------------------
             if ($q === 2) {
                 $clean = strtolower($speech);
-                $clean = str_replace([' ', ','], '', $clean);
+                $clean = str_replace([' ', ','], '', $clean); // remove spaces/commas
                 $clean = str_replace(['dot'], '.', $clean);
                 $clean = str_replace(['at'], '@', $clean);
                 $answer = preg_replace('/[^a-z0-9@._-]/', '', $clean);
             }
 
+            // ------------------ Phone reconstruction ------------------
             if ($q === 3) {
-                $digits = preg_replace('/\D/', '', $speech);
-                $answer = implode(' ', str_split($digits));
+                $answer = preg_replace('/\D/', '', $speech); // only digits
             }
 
-            $confirmText = "You said: $answer. Is that right? Just say yes or no.";
+            if ($q === 3) {
+                // Read phone numbers digit by digit
+                $answer = implode(' ', str_split($answer));
+            } else {
+                $answer = $answer;
+            }
 
+            // -------------- Confirmation step ------------------
             $resp->gather([
                 'input' => 'speech',
                 'speechTimeout' => 'auto',
@@ -143,51 +109,55 @@ class VoiceController extends Controller
                     'sid' => $sid,
                     'answer' => urlencode($answer)
                 ])
-            ])->say($this->humanize($confirmText));
+            ])->say("You said: $answer. Is that correct?", ['voice' => 'Polly.Joanna']);
 
             return response($resp, 200)->header('Content-Type', 'text/xml');
 
         } catch (\Throwable $e) {
-            \Log::error(' HANDLE ERROR: ' . $e->getMessage());
-            $resp->say($this->humanize("Oh no, something went wrong. Let’s end this call for now."));
+            \Log::error('🔥 TWILIO HANDLE ERROR: ' . $e->getMessage());
+            $resp->say("A system error occurred. Goodbye.", ['voice' => 'Polly.Joanna']);
             $resp->hangup();
             return response($resp, 200)->header('Content-Type', 'text/xml');
         }
     }
 
-
-    /*
-    |--------------------------------------------------------------------------
-    | Confirmation Step
-    |--------------------------------------------------------------------------
-    */
     public function confirm(Request $request)
     {
-        $resp = new VoiceResponse();
+        $resp = new \Twilio\TwiML\VoiceResponse();
 
         $q      = (int) $request->input('q');
         $sid    = $request->input('sid');
         $answer = urldecode($request->input('answer'));
         $speech = strtolower(trim($request->input('SpeechResult')));
 
+        \Log::info("🟦 CONFIRMATION", [
+            'sid' => $sid,
+            'q' => $q,
+            'speech' => $speech,
+            'answer' => $answer
+        ]);
+
         if (str_contains($speech, 'yes')) {
 
+            // PHONE VALIDATION (question 3)
             if ($q === 3) {
                 $cleanPhone = preg_replace('/\D/', '', $answer);
                 if (strlen($cleanPhone) < 7) {
-                    $resp->say($this->humanize("Hmm, that number didn't seem valid. Let's try again."));
+                    $resp->say("The phone number you provided is not valid. Please try again.", ['voice' => 'Polly.Joanna']);
                     $resp->redirect(route('twilio.question', ['q' => 3, 'sid' => $sid]));
-                    return response($resp, 200);
+                    return response($resp, 200)->header('Content-Type', 'text/xml');
                 }
                 $answer = $cleanPhone;
             }
 
+            // EMAIL VALIDATION (question 2)
             if ($q === 2 && !filter_var($answer, FILTER_VALIDATE_EMAIL)) {
-                $resp->say($this->humanize("That email doesn’t look right. Let’s try one more time."));
+                $resp->say("The email you spoke is not valid. Let's try again.", ['voice' => 'Polly.Joanna']);
                 $resp->redirect(route('twilio.question', ['q' => 2, 'sid' => $sid]));
-                return response($resp, 200);
+                return response($resp, 200)->header('Content-Type', 'text/xml');
             }
 
+            // Save confirmed answer
             $call = SurveyCall::where('call_sid', $sid)->first();
             if ($call) {
                 match ($q) {
@@ -197,28 +167,29 @@ class VoiceController extends Controller
                 };
             }
 
+            // Move to next question automatically
             if ($q < 3) {
-                $resp->say($this->humanize("Perfect, thank you!"));
-                $resp->redirect(route('twilio.question', ['q' => $q + 1, 'sid' => $sid]));
+                $resp->redirect(route('twilio.question', [
+                    'q' => $q + 1,
+                    'sid' => $sid
+                ]));
             } else {
-                $resp->say($this->humanize("That’s everything I needed. Thanks so much! Have a wonderful day."));
+                $resp->say("Thank you, all details recorded. Goodbye.", ['voice' => 'Polly.Joanna']);
                 $resp->hangup();
             }
 
         } else {
-            $resp->say($this->humanize("No worries, let’s try that again."));
-            $resp->redirect(route('twilio.question', compact('q', 'sid')));
+            // user said no → repeat current question
+            $resp->say("Okay, let's try again.", ['voice' => 'Polly.Joanna']);
+            $resp->redirect(route('twilio.question', [
+                'q' => $q,
+                'sid' => $sid
+            ]));
         }
 
         return response($resp, 200)->header('Content-Type', 'text/xml');
     }
 
-
-    /*
-    |--------------------------------------------------------------------------
-    | OUTBOUND CALL (You asked where it went — here it is!)
-    |--------------------------------------------------------------------------
-    */
     public function outbound($phone)
     {
         $twilio = new \Twilio\Rest\Client(env('TWILIO_SID'), env('TWILIO_TOKEN'));
@@ -234,36 +205,32 @@ class VoiceController extends Controller
             'call_sid' => $call->sid
         ]);
 
-        return back()->with('status', 'Call placed successfully');
+        return back()->with('status', 'Call placed');
     }
 
-
-    /*
-    |--------------------------------------------------------------------------
-    | OpenAI Test Route
-    |--------------------------------------------------------------------------
-    */
     public function openaiTest()
     {
         try {
-            $result = OpenAIClient::chat()->create([
+            $result = \OpenAI\Laravel\Facades\OpenAI::chat()->create([
                 'model' => 'gpt-3.5-turbo',
+                'temperature' => 0,
                 'messages' => [
                     ['role' => 'user', 'content' => 'Say hello in one word']
                 ],
-                'max_tokens' => 5
+                'max_tokens' => 5,
             ]);
 
             return response()->json([
-                'status' => 'OpenAI OK',
-                'reply'  => $result->choices[0]->message->content
+                'status' => ' OpenAI WORKING',
+                'reply'  => $result->choices[0]->message->content,
             ]);
 
         } catch (\Throwable $e) {
             return response()->json([
-                'status' => 'OpenAI ERROR',
-                'error'  => $e->getMessage()
+                'status' => ' OpenAI FAILED',
+                'error'  => $e->getMessage(),
             ], 500);
         }
     }
+
 }
