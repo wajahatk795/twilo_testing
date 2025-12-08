@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Twilio\TwiML\VoiceResponse;
 use App\Models\SurveyCall;
+use OpenAI\Laravel\Facades\OpenAI as OpenAIClient;
 
 class VoiceController extends Controller
 {
@@ -19,7 +20,9 @@ class VoiceController extends Controller
         );
 
         $resp->say('Hi, we will ask you three quick questions.', ['voice' => 'Polly.Joanna']);
-        $resp->redirect(route('twilio.question', ['q' => 1, 'sid' => $sid]));
+        // $resp->redirect(route('twilio.question', ['q' => 1, 'sid' => $sid]));
+
+        $resp->redirect(route('twilio.question', ['q' => 3, 'sid' => $sid]));
         return response($resp, 200)->header('Content-Type', 'text/xml');
     }
 
@@ -33,7 +36,7 @@ class VoiceController extends Controller
         $prompts = [
             1 => 'Please say your full name after the beep.',
             2 => 'Please spell your email address, one character at a time. For example: a l e x dot j o h n s o n at g m a i l dot c o m',
-            3 => 'Please say your phone number, one digit at a time.',
+            3 => 'Please say your phone number, one digit at a time. For example: 5 5 5 1 2 3 4 5 6 7',
         ];
 
         $gather = $resp->gather([
@@ -51,7 +54,7 @@ class VoiceController extends Controller
 
     public function handle(Request $request)
     {
-        $resp = new VoiceResponse();
+        $resp = new \Twilio\TwiML\VoiceResponse();
 
         try {
             $q      = (int) $request->input('q');
@@ -76,20 +79,29 @@ class VoiceController extends Controller
 
             $answer = $speech;
 
-            // PHONE DIGIT EXTRACTION
+            // ------------------ Email reconstruction ------------------
+            // if ($q === 2) {
+            //     $clean = strtolower($speech);
+            //     $clean = str_replace([' ', ','], '', $clean); // remove spaces/commas
+            //     $clean = str_replace(['dot'], '.', $clean);
+            //     $clean = str_replace(['at'], '@', $clean);
+            //     $answer = preg_replace('/[^a-z0-9@._-]/', '', $clean);
+            // }
+
+            // ------------------ Phone reconstruction ------------------
             if ($q === 3) {
-                $answer = preg_replace('/\D/', '', $speech);
+                $answer = preg_replace('/\D/', '', $speech); // only digits
             }
 
-            // PREPARE ANSWER FOR SPEAKING (DIGIT-BY-DIGIT)
             if ($q === 3) {
-                $answerForSay = "<say-as interpret-as=\"digits\">$answer</say-as>";
+                // Read phone numbers digit by digit
+                $answer = implode(' ', str_split($answer));
             } else {
-                $answerForSay = $answer;
+                $answer = $answer;
             }
 
-            // CONFIRMATION (WITH FIX)
-            $gather = $resp->gather([
+            // -------------- Confirmation step ------------------
+            $resp->gather([
                 'input' => 'speech',
                 'speechTimeout' => 'auto',
                 'method' => 'POST',
@@ -98,12 +110,7 @@ class VoiceController extends Controller
                     'sid' => $sid,
                     'answer' => urlencode($answer)
                 ])
-            ]);
-
-            $gather->say(
-                "<speak>You said: $answerForSay. Is that correct? Say Yes or No.</speak>",
-                ['voice' => 'Polly.Joanna']
-            );
+            ])->say("You said: $answer. Is that correct? Say Yes or No.");
 
             return response($resp, 200)->header('Content-Type', 'text/xml');
 
@@ -117,7 +124,7 @@ class VoiceController extends Controller
 
     public function confirm(Request $request)
     {
-        $resp = new VoiceResponse();
+        $resp = new \Twilio\TwiML\VoiceResponse();
 
         $q      = (int) $request->input('q');
         $sid    = $request->input('sid');
@@ -133,7 +140,7 @@ class VoiceController extends Controller
 
         if (str_contains($speech, 'yes')) {
 
-            // PHONE VALIDATION
+            // PHONE VALIDATION (question 3)
             if ($q === 3) {
                 $cleanPhone = preg_replace('/\D/', '', $answer);
                 if (strlen($cleanPhone) < 7) {
@@ -144,14 +151,14 @@ class VoiceController extends Controller
                 $answer = $cleanPhone;
             }
 
-            // EMAIL VALIDATION
+            // EMAIL VALIDATION (question 2)
             if ($q === 2 && !filter_var($answer, FILTER_VALIDATE_EMAIL)) {
                 $resp->say("The email you spoke is not valid. Let's try again.");
                 $resp->redirect(route('twilio.question', ['q' => 2, 'sid' => $sid]));
                 return response($resp, 200)->header('Content-Type', 'text/xml');
             }
 
-            // SAVE CONFIRMED ANSWER
+            // Save confirmed answer
             $call = SurveyCall::where('call_sid', $sid)->first();
             if ($call) {
                 match ($q) {
@@ -161,7 +168,7 @@ class VoiceController extends Controller
                 };
             }
 
-            // GO TO NEXT QUESTION
+            // Move to next question automatically
             if ($q < 3) {
                 $resp->redirect(route('twilio.question', [
                     'q' => $q + 1,
@@ -173,7 +180,7 @@ class VoiceController extends Controller
             }
 
         } else {
-            // USER SAID NO → REPEAT QUESTION
+            // user said no → repeat current question
             $resp->say("Okay, let's try again.");
             $resp->redirect(route('twilio.question', [
                 'q' => $q,
@@ -183,8 +190,6 @@ class VoiceController extends Controller
 
         return response($resp, 200)->header('Content-Type', 'text/xml');
     }
-
-
 
     public function outbound($phone)
     {
