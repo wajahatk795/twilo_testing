@@ -92,6 +92,13 @@ class VoiceController extends Controller
                 $answer = preg_replace('/\D/', '', $speech); // only digits
             }
 
+            if ($q === 3) {
+                // Read phone numbers digit by digit
+                $answerForSay = implode(' ', str_split($answer));
+            } else {
+                $answerForSay = $answer;
+            }
+
             // -------------- Confirmation step ------------------
             $resp->gather([
                 'input' => 'speech',
