@@ -19,56 +19,8 @@ class VoiceController extends Controller
             ['phone' => request('From')]
         );
 
-        // Professional AI greeting flow
-        $gather = $resp->gather([
-            'input' => 'speech',
-            'speechTimeout' => 'auto',
-            'timeout' => 5, // wait 5 seconds for user response
-            'action' => route('twilio.greeting', ['sid' => $sid, 'attempt' => 1]),
-            'method' => 'POST',
-        ]);
-
-        $gather->say("Hello, I am Polly Joanna.", ['voice' => 'Polly.Joanna']);
-
-        $resp->redirect(route('twilio.greeting', ['sid' => $sid, 'attempt' => 1]));
-
-        return response($resp, 200)->header('Content-Type', 'text/xml');
-    }
-
-    public function greeting(Request $request)
-    {
-        $resp = new VoiceResponse();
-        $sid = $request->input('sid');
-        $attempt = (int) $request->input('attempt', 1);
-        $speech = strtolower(trim((string) $request->input('SpeechResult')));
-
-        if ($speech && str_contains($speech, 'hello')) {
-            // User responded, proceed to first question
-            $resp->say("Great! Let's get started with a few quick questions.", ['voice' => 'Polly.Joanna']);
-            $resp->redirect(route('twilio.question', ['q' => 1, 'sid' => $sid]));
-        } else {
-            if ($attempt < 3) {
-                // Repeat greeting politely
-                $gather = $resp->gather([
-                    'input' => 'speech',
-                    'speechTimeout' => 'auto',
-                    'timeout' => 5,
-                    'action' => route('twilio.greeting', ['sid' => $sid, 'attempt' => $attempt + 1]),
-                    'method' => 'POST',
-                ]);
-
-                $message = match($attempt) {
-                    1 => "Hello?",
-                    2 => "Hello? I am Polly Joanna.",
-                };
-
-                $gather->say($message, ['voice' => 'Polly.Joanna']);
-            } else {
-                // End call after 3 failed attempts
-                $resp->say("Since we did not hear from you, we will end the call. Goodbye.", ['voice' => 'Polly.Joanna']);
-                $resp->hangup();
-            }
-        }
+        $resp->say('Hello, I am Polly Joanna.', ['voice' => 'Polly.Joanna']);
+        $resp->redirect(route('twilio.question', ['q' => 1, 'sid' => $sid]));
 
         return response($resp, 200)->header('Content-Type', 'text/xml');
     }
@@ -81,7 +33,7 @@ class VoiceController extends Controller
         $resp = new VoiceResponse();
 
         $prompts = [
-            1 => 'Please say your full name after the beep.',
+            1 => 'May I have your full name, please?',
             2 => 'Please spell your email address, one character at a time. For example: a l e x dot j o h n s o n at g m a i l dot c o m',
             3 => 'Please say your phone number, one digit at a time. For example: 5 5 5 1 2 3 4 5 6 7',
         ];
