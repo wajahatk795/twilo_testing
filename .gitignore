@@ -22,3 +22,12 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+composer.lock
+npm-debug.log
+yarn-error.log
+yarn.lock
+package-lock.json
+*.zip
+*.tar.gz
+*.rar
+*.7z
