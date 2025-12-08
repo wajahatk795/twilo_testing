@@ -40,72 +40,121 @@ class VoiceController extends Controller
 
         $gather = $resp->gather([
             'input' => 'speech',
-            'speechTimeout' => 'auto',
-            'timeout' => 8,
+            'speechTimeout' => 'auto',   // User can speak longer
+            'timeout' => 15,             // Give them 15 seconds
             'action' => route('twilio.handle', ['q' => $q, 'sid' => $sid]),
             'method' => 'POST',
         ]);
 
         $gather->say($prompts[$q], ['voice' => 'Polly.Joanna']);
 
-        // ✅ NO fallback here — Twilio will return to handle()
-
         return response($resp, 200)->header('Content-Type', 'text/xml');
     }
 
-    public function handle(\Illuminate\Http\Request $request)
+    public function handle(Request $request)
     {
         $resp = new \Twilio\TwiML\VoiceResponse();
-    
+
         try {
             $q      = (int) $request->input('q');
             $sid    = $request->input('sid');
             $speech = trim((string) $request->input('SpeechResult'));
-    
+
+            \Log::info("📞 [TWILIO HANDLE] Incoming Speech", [
+                'question' => $q,
+                'sid' => $sid,
+                'SpeechResult_raw' => $request->input('SpeechResult'),
+            ]);
+
             if (!$speech) {
+                \Log::warning("⚠️ No speech detected for question $q", [
+                    'sid' => $sid
+                ]);
+
                 $resp->say("I did not hear anything. Let's try again.");
                 $resp->redirect(route('twilio.question', ['q' => $q, 'sid' => $sid]));
                 return response($resp, 200)->header('Content-Type', 'text/xml');
             }
-    
-            // ✅ OpenAI in SAFE MODE (cannot exceed size)
+
+            // ----- OpenAI Extraction -----
             $res = OpenAIClient::chat()->create([
                 'model' => 'gpt-3.5-turbo',
                 'temperature' => 0,
-                'max_tokens' => 20,
+                'max_tokens' => 30,
                 'messages' => [
-                    ['role' => 'system', 'content' => 'Return only the extracted value.'],
-                    ['role' => 'user', 'content' => "Question $q speech: $speech"]
+                    ['role' => 'system', 'content' => 'Return only the extracted value. No explanation.'],
+                    ['role' => 'user', 'content' => "Q$q Speech: $speech"]
                 ],
             ]);
-    
-            $answer = substr(trim($res->choices[0]->message->content ?? 'unknown'), 0, 50);
-    
+
+            $answer = trim($res->choices[0]->message->content ?? '');
+
+            \Log::info("🤖 OpenAI Extraction", [
+                'question' => $q,
+                'sid' => $sid,
+                'speech_input' => $speech,
+                'openai_answer' => $answer,
+            ]);
+
+            // ----- Email Validation -----
+            if ($q === 2) {
+                if (!filter_var($answer, FILTER_VALIDATE_EMAIL)) {
+
+                    \Log::warning("❌ Email validation failed", [
+                        'invalid_email' => $answer,
+                        'sid' => $sid
+                    ]);
+
+                    $resp->say("The email you provided is not valid. Please try again.");
+                    $resp->redirect(route('twilio.question', ['q' => 2, 'sid' => $sid]));
+                    return response($resp, 200)->header('Content-Type', 'text/xml');
+                }
+            }
+
+            // ----- Save to DB -----
             $call = SurveyCall::where('call_sid', $sid)->first();
-    
+
             if ($call) {
                 match ($q) {
                     1 => $call->update(['name' => $answer]),
                     2 => $call->update(['email' => $answer]),
                     3 => $call->update(['dob' => $answer, 'status' => 'complete']),
                 };
+
+                \Log::info("💾 Data saved to database", [
+                    'q' => $q,
+                    'sid' => $sid,
+                    'saved_answer' => $answer,
+                ]);
             }
-    
+
+            // ----- Move to Next Step -----
             if ($q < 3) {
+                \Log::info("➡️ Moving to next question", [
+                    'next_question' => $q + 1,
+                    'sid' => $sid
+                ]);
+
                 $resp->redirect(route('twilio.question', ['q' => $q + 1, 'sid' => $sid]));
             } else {
-                $resp->say('Thank you, we have everything we need. Goodbye.');
+                \Log::info("📞 Survey complete — hanging up", [
+                    'sid' => $sid
+                ]);
+
+                $resp->say('Thank you. Goodbye.');
                 $resp->hangup();
             }
-    
+
         } catch (\Throwable $e) {
-            // ✅ CRITICAL: Never allow Laravel to output HTML
-            \Log::error('TWILIO HANDLE ERROR: ' . $e->getMessage());
-    
-            $resp->say("A system error occurred. Goodbye.");
+            \Log::error("🔥 TWILIO ERROR", [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            $resp->say('A system error occurred. Goodbye.');
             $resp->hangup();
         }
-    
+
         return response($resp, 200)->header('Content-Type', 'text/xml');
     }
 
@@ -126,7 +175,7 @@ class VoiceController extends Controller
 
         return back()->with('status', 'Call placed');
     }
-    
+
     public function openaiTest()
     {
         try {
@@ -138,12 +187,12 @@ class VoiceController extends Controller
                 ],
                 'max_tokens' => 5,
             ]);
-    
+
             return response()->json([
                 'status' => '✅ OpenAI WORKING',
                 'reply'  => $result->choices[0]->message->content,
             ]);
-    
+
         } catch (\Throwable $e) {
             return response()->json([
                 'status' => '❌ OpenAI FAILED',
