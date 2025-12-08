@@ -20,9 +20,8 @@ class VoiceController extends Controller
         );
 
         $resp->say('Hi, we will ask you three quick questions.', ['voice' => 'Polly.Joanna']);
-        // $resp->redirect(route('twilio.question', ['q' => 1, 'sid' => $sid]));
+        $resp->redirect(route('twilio.question', ['q' => 1, 'sid' => $sid]));
 
-        $resp->redirect(route('twilio.question', ['q' => 3, 'sid' => $sid]));
         return response($resp, 200)->header('Content-Type', 'text/xml');
     }
 
@@ -80,13 +79,13 @@ class VoiceController extends Controller
             $answer = $speech;
 
             // ------------------ Email reconstruction ------------------
-            // if ($q === 2) {
-            //     $clean = strtolower($speech);
-            //     $clean = str_replace([' ', ','], '', $clean); // remove spaces/commas
-            //     $clean = str_replace(['dot'], '.', $clean);
-            //     $clean = str_replace(['at'], '@', $clean);
-            //     $answer = preg_replace('/[^a-z0-9@._-]/', '', $clean);
-            // }
+            if ($q === 2) {
+                $clean = strtolower($speech);
+                $clean = str_replace([' ', ','], '', $clean); // remove spaces/commas
+                $clean = str_replace(['dot'], '.', $clean);
+                $clean = str_replace(['at'], '@', $clean);
+                $answer = preg_replace('/[^a-z0-9@._-]/', '', $clean);
+            }
 
             // ------------------ Phone reconstruction ------------------
             if ($q === 3) {
