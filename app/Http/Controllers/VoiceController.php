@@ -60,23 +60,13 @@ class VoiceController extends Controller
             $sid    = $request->input('sid');
             $speech = trim((string) $request->input('SpeechResult'));
 
-            \Log::info("📞 [TWILIO HANDLE] Incoming Speech", [
-                'question' => $q,
-                'sid' => $sid,
-                'SpeechResult_raw' => $request->input('SpeechResult'),
-            ]);
-
             if (!$speech) {
-                \Log::warning("⚠️ No speech detected for question $q", [
-                    'sid' => $sid
-                ]);
-
                 $resp->say("I did not hear anything. Let's try again.");
                 $resp->redirect(route('twilio.question', ['q' => $q, 'sid' => $sid]));
                 return response($resp, 200)->header('Content-Type', 'text/xml');
             }
 
-            // ----- OpenAI Extraction -----
+            // Extract clean data using OpenAI
             $res = OpenAIClient::chat()->create([
                 'model' => 'gpt-3.5-turbo',
                 'temperature' => 0,
@@ -89,74 +79,45 @@ class VoiceController extends Controller
 
             $answer = trim($res->choices[0]->message->content ?? '');
 
-            \Log::info("🤖 OpenAI Extraction", [
-                'question' => $q,
-                'sid' => $sid,
-                'speech_input' => $speech,
-                'openai_answer' => $answer,
-            ]);
+            $call = SurveyCall::where('call_sid', $sid)->first();
 
-            // ----- Email Validation -----
             if ($q === 2) {
+                // ------------------------
+                // ✅ EMAIL VALIDATION
+                // ------------------------
                 if (!filter_var($answer, FILTER_VALIDATE_EMAIL)) {
-
-                    \Log::warning("❌ Email validation failed", [
-                        'invalid_email' => $answer,
-                        'sid' => $sid
-                    ]);
-
                     $resp->say("The email you provided is not valid. Please try again.");
                     $resp->redirect(route('twilio.question', ['q' => 2, 'sid' => $sid]));
                     return response($resp, 200)->header('Content-Type', 'text/xml');
                 }
             }
 
-            // ----- Save to DB -----
-            $call = SurveyCall::where('call_sid', $sid)->first();
-
+            // Save to database
             if ($call) {
                 match ($q) {
                     1 => $call->update(['name' => $answer]),
                     2 => $call->update(['email' => $answer]),
                     3 => $call->update(['dob' => $answer, 'status' => 'complete']),
                 };
-
-                \Log::info("💾 Data saved to database", [
-                    'q' => $q,
-                    'sid' => $sid,
-                    'saved_answer' => $answer,
-                ]);
             }
 
-            // ----- Move to Next Step -----
+            // Go to next question
             if ($q < 3) {
-                \Log::info("➡️ Moving to next question", [
-                    'next_question' => $q + 1,
-                    'sid' => $sid
-                ]);
-
                 $resp->redirect(route('twilio.question', ['q' => $q + 1, 'sid' => $sid]));
             } else {
-                \Log::info("📞 Survey complete — hanging up", [
-                    'sid' => $sid
-                ]);
-
                 $resp->say('Thank you. Goodbye.');
                 $resp->hangup();
             }
 
         } catch (\Throwable $e) {
-            \Log::error("🔥 TWILIO ERROR", [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-
+            \Log::error('TWILIO ERROR: ' . $e->getMessage());
             $resp->say('A system error occurred. Goodbye.');
             $resp->hangup();
         }
 
         return response($resp, 200)->header('Content-Type', 'text/xml');
     }
+
 
     public function outbound($phone)
     {
