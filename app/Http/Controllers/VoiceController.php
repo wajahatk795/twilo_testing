@@ -71,7 +71,7 @@ class VoiceController extends Controller
                 ->update(["q{$q}_speech" => $speech]);
 
             if (!$speech) {
-                $resp->say("I did not hear anything. Let's try again.");
+                $resp->say("I did not hear anything. Let's try again." , ['voice' => 'Polly.Joanna']);
                 $resp->redirect(route('twilio.question', ['q' => $q, 'sid' => $sid]));
                 return response($resp, 200)->header('Content-Type', 'text/xml');
             }
@@ -109,13 +109,13 @@ class VoiceController extends Controller
                     'sid' => $sid,
                     'answer' => urlencode($answer)
                 ])
-            ])->say("You said: $answer. Is that correct? Say Yes or No.");
+            ])->say("You said: $answer. Is that correct?", ['voice' => 'Polly.Joanna']);
 
             return response($resp, 200)->header('Content-Type', 'text/xml');
 
         } catch (\Throwable $e) {
             \Log::error('🔥 TWILIO HANDLE ERROR: ' . $e->getMessage());
-            $resp->say("A system error occurred. Goodbye.");
+            $resp->say("A system error occurred. Goodbye.", ['voice' => 'Polly.Joanna']);
             $resp->hangup();
             return response($resp, 200)->header('Content-Type', 'text/xml');
         }
@@ -143,7 +143,7 @@ class VoiceController extends Controller
             if ($q === 3) {
                 $cleanPhone = preg_replace('/\D/', '', $answer);
                 if (strlen($cleanPhone) < 7) {
-                    $resp->say("The phone number you provided is not valid. Please try again.");
+                    $resp->say("The phone number you provided is not valid. Please try again.", ['voice' => 'Polly.Joanna']);
                     $resp->redirect(route('twilio.question', ['q' => 3, 'sid' => $sid]));
                     return response($resp, 200)->header('Content-Type', 'text/xml');
                 }
@@ -152,7 +152,7 @@ class VoiceController extends Controller
 
             // EMAIL VALIDATION (question 2)
             if ($q === 2 && !filter_var($answer, FILTER_VALIDATE_EMAIL)) {
-                $resp->say("The email you spoke is not valid. Let's try again.");
+                $resp->say("The email you spoke is not valid. Let's try again.", ['voice' => 'Polly.Joanna']);
                 $resp->redirect(route('twilio.question', ['q' => 2, 'sid' => $sid]));
                 return response($resp, 200)->header('Content-Type', 'text/xml');
             }
@@ -174,13 +174,13 @@ class VoiceController extends Controller
                     'sid' => $sid
                 ]));
             } else {
-                $resp->say("Thank you, all details recorded. Goodbye.");
+                $resp->say("Thank you, all details recorded. Goodbye.", ['voice' => 'Polly.Joanna']);
                 $resp->hangup();
             }
 
         } else {
             // user said no → repeat current question
-            $resp->say("Okay, let's try again.");
+            $resp->say("Okay, let's try again.", ['voice' => 'Polly.Joanna']);
             $resp->redirect(route('twilio.question', [
                 'q' => $q,
                 'sid' => $sid
