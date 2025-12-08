@@ -48,7 +48,7 @@ class VoiceController extends Controller
 
         $gather->say($prompts[$q], ['voice' => 'Polly.Joanna']);
 
-        // ✅ NO fallback here — Twilio will return to handle()
+        //  NO fallback here — Twilio will return to handle()
 
         return response($resp, 200)->header('Content-Type', 'text/xml');
     }
@@ -68,7 +68,7 @@ class VoiceController extends Controller
                 return response($resp, 200)->header('Content-Type', 'text/xml');
             }
 
-            // ✅ OpenAI in SAFE MODE (cannot exceed size)
+            //  OpenAI in SAFE MODE (cannot exceed size)
             $res = OpenAIClient::chat()->create([
                 'model' => 'gpt-3.5-turbo',
                 'temperature' => 0,
@@ -99,7 +99,7 @@ class VoiceController extends Controller
             }
 
         } catch (\Throwable $e) {
-            // ✅ CRITICAL: Never allow Laravel to output HTML
+            //  CRITICAL: Never allow Laravel to output HTML
             \Log::error('TWILIO HANDLE ERROR: ' . $e->getMessage());
 
             $resp->say("A system error occurred. Goodbye.");
@@ -109,9 +109,8 @@ class VoiceController extends Controller
         return response($resp, 200)->header('Content-Type', 'text/xml');
     }
 
-    public function outbound($phone = "+923162534486")
+    public function outbound($phone)
     {
-        $phone = "+923162534486"; // Default phone number for testing
         $twilio = new \Twilio\Rest\Client(env('TWILIO_SID'), env('TWILIO_TOKEN'));
 
         $call = $twilio->calls->create(
@@ -141,13 +140,13 @@ class VoiceController extends Controller
             ]);
 
             return response()->json([
-                'status' => '✅ OpenAI WORKING',
+                'status' => ' OpenAI WORKING',
                 'reply'  => $result->choices[0]->message->content,
             ]);
 
         } catch (\Throwable $e) {
             return response()->json([
-                'status' => '❌ OpenAI FAILED',
+                'status' => ' OpenAI FAILED',
                 'error'  => $e->getMessage(),
             ], 500);
         }

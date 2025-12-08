@@ -13,7 +13,7 @@ Route::get('/', function () {
 Route::post('/twilio/incoming', [VoiceController::class,'incoming'])->name('twilio.incoming');
 Route::post('/twilio/question', [VoiceController::class,'question'])->name('twilio.question');
 Route::post('/twilio/handle',   [VoiceController::class,'handle'])  ->name('twilio.handle');
-Route::get('/call/{phone?}',     [VoiceController::class,'outbound'])->name('twilio.outbound');
+Route::get('/call/{phone}',     [VoiceController::class,'outbound'])->name('twilio.outbound');
 
 
 Route::get('/openai-test', [\App\Http\Controllers\VoiceController::class, 'openaiTest']);
