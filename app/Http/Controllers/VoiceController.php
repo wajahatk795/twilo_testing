@@ -30,6 +30,8 @@ class VoiceController extends Controller
 
         $gather->say("Hello, I am Polly Joanna.", ['voice' => 'Polly.Joanna']);
 
+        $resp->redirect(route('twilio.greeting', ['sid' => $sid, 'attempt' => 1]));
+
         return response($resp, 200)->header('Content-Type', 'text/xml');
     }
 
