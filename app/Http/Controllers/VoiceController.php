@@ -9,7 +9,7 @@ use OpenAI\Laravel\Facades\OpenAI as OpenAIClient;
 
 class VoiceController extends Controller
 {
-    // Incoming call: create record (if new) and jump to conversation
+    // Incoming call: create record and jump into the AI-driven flow
     public function incoming(Request $request)
     {
         \Log::info('TWILIO INCOMING', $request->all());
@@ -27,14 +27,13 @@ class VoiceController extends Controller
         );
 
         $resp = new VoiceResponse();
-        $resp->say("Hi — thanks for answering. I have a few quick questions.", ['voice' => 'Polly.Joanna']);
+        $resp->say("Hi — thank you for answering. I have a few quick questions to capture your details.", ['voice' => 'Polly.Joanna']);
         $resp->pause(['length' => 1]);
         $resp->redirect(route('twilio.converse', ['sid' => $sid]));
-
         return response($resp, 200)->header('Content-Type', 'text/xml');
     }
 
-    // Converse: ask model what to say next (model returns small JSON)
+    // Converse: ask the model what to say next. Model must return JSON only.
     public function converse(Request $request)
     {
         $sid = $request->input('sid');
@@ -44,15 +43,16 @@ class VoiceController extends Controller
             $resp = new VoiceResponse();
             $resp->say('Call record not found. Goodbye.', ['voice' => 'Polly.Joanna']);
             $resp->hangup();
-            return response($resp,200)->header('Content-Type','text/xml');
+            return response($resp, 200)->header('Content-Type', 'text/xml');
         }
 
         $history = json_decode($call->conversation ?: '[]', true);
         $historyForApi = $history;
-        $historyForApi[] = ['role'=>'user','content'=>
-            "Decide the next short phrase to say to the caller. REPLY ONLY WITH JSON: " .
-            '{"speak":"...","done":true|false,"store":{}}. ' .
-            "Keep 'speak' under 40 words. 'store' may include {name,email,mobile,dob} to persist."
+        $historyForApi[] = [
+            'role' => 'user',
+            'content' => "Decide the next concise phrase to say to collect lead info (name, phone, email). " .
+                         "REPLY ONLY with JSON: {\"speak\":\"...\",\"done\":true|false,\"store\":{}}. " .
+                         "Keep 'speak' <= 40 words. 'store' may contain name,email,mobile."
         ];
 
         try {
@@ -67,19 +67,18 @@ class VoiceController extends Controller
             $resp = new VoiceResponse();
             $resp->say("Sorry, a system error occurred. Goodbye.", ['voice' => 'Polly.Joanna']);
             $resp->hangup();
-            return response($resp,200)->header('Content-Type','text/xml');
+            return response($resp, 200)->header('Content-Type', 'text/xml');
         }
 
         $assistantText = trim($res->choices[0]->message->content ?? '');
-        $history[] = ['role'=>'assistant','content'=>$assistantText];
+        $history[] = ['role' => 'assistant', 'content' => $assistantText];
         $call->conversation = json_encode($history);
         $call->save();
 
         $json = $this->safeJsonDecode($assistantText);
 
         if (!$json || !isset($json['speak'])) {
-            // fallback
-            $speak = "Could you please tell me your full name?";
+            $speak = "Please tell me your full name.";
             $done = false;
             $store = [];
         } else {
@@ -106,40 +105,37 @@ class VoiceController extends Controller
             $call->status = 'complete';
             $call->save();
         } else {
-            // fallback if gather fails
-            $resp->say("If I don't hear anything, I'll repeat.", ['voice'=>'Polly.Joanna']);
+            $resp->say("If I don't hear anything I'll repeat.", ['voice' => 'Polly.Joanna']);
             $resp->redirect(route('twilio.converse', ['sid' => $sid]));
         }
 
-        return response($resp,200)->header('Content-Type','text/xml');
+        return response($resp, 200)->header('Content-Type', 'text/xml');
     }
 
-    // Handle speech from Twilio, append to conversation and continue
+    // Handle speech from Twilio -> append to conversation -> ask model for next step
     public function handleSpeech(Request $request)
     {
         $sid = $request->input('sid');
-        $speech = trim((string)$request->input('SpeechResult',''));
+        $speech = trim((string)$request->input('SpeechResult', ''));
 
         \Log::info('TWILIO HANDLE SPEECH', compact('sid','speech'));
 
         $call = SurveyCall::where('call_sid', $sid)->first();
         if (!$call) {
             $resp = new VoiceResponse();
-            $resp->say('Call record missing. Goodbye.', ['voice'=>'Polly.Joanna']);
+            $resp->say('Call record missing. Goodbye.', ['voice' => 'Polly.Joanna']);
             $resp->hangup();
-            return response($resp,200)->header('Content-Type','text/xml');
+            return response($resp, 200)->header('Content-Type', 'text/xml');
         }
 
         $history = json_decode($call->conversation ?: '[]', true);
-        $history[] = ['role'=>'user','content'=>$speech];
+        $history[] = ['role' => 'user', 'content' => $speech];
         $call->conversation = json_encode($history);
-        $this->storeLatestSpeechColumn($call, $speech); // non-fatal helper
+        $this->storeLatestSpeechColumn($call, $speech); // safe heuristic
         $call->save();
 
-        $userPrompt = "User replied: " . $speech .
-            ". Decide the next short phrase to say. REPLY ONLY WITH JSON: " .
-            '{"speak":"...","done":true|false,"store":{}}. ' .
-            "Keep 'speak' concise (<=40 words).";
+        $userPrompt = "User replied: " . $speech . ". Decide the next short phrase to say. REPLY ONLY with JSON: " .
+                      '{"speak":"...","done":true|false,"store":{}}. Keep speak concise (<=40 words).';
 
         $historyForApi = json_decode($call->conversation ?: '[]', true);
         $historyForApi[] = ['role'=>'user','content'=>$userPrompt];
@@ -154,20 +150,20 @@ class VoiceController extends Controller
         } catch (\Throwable $e) {
             \Log::error('OpenAI handleSpeech error: '.$e->getMessage());
             $resp = new VoiceResponse();
-            $resp->say("Sorry, something went wrong. Goodbye.", ['voice'=>'Polly.Joanna']);
+            $resp->say("Sorry, something went wrong. Goodbye.", ['voice' => 'Polly.Joanna']);
             $resp->hangup();
-            return response($resp,200)->header('Content-Type','text/xml');
+            return response($resp, 200)->header('Content-Type', 'text/xml');
         }
 
         $assistantText = trim($res->choices[0]->message->content ?? '');
-        $history[] = ['role'=>'assistant','content'=>$assistantText];
+        $history[] = ['role' => 'assistant', 'content' => $assistantText];
         $call->conversation = json_encode($history);
         $call->save();
 
         $json = $this->safeJsonDecode($assistantText);
 
         if (!$json || !isset($json['speak'])) {
-            $speak = "Sorry, could you repeat that more clearly?";
+            $speak = "Sorry, I didn't get that. Could you repeat?";
             $done = false;
             $store = [];
         } else {
@@ -180,46 +176,33 @@ class VoiceController extends Controller
 
         $resp = new VoiceResponse();
         if ($done) {
-            $resp->say($speak, ['voice'=>'Polly.Joanna']);
-            $resp->say("Thank you. Goodbye.", ['voice'=>'Polly.Joanna']);
+            $resp->say($speak, ['voice' => 'Polly.Joanna']);
+            $resp->say("Thank you. Goodbye.", ['voice' => 'Polly.Joanna']);
             $resp->hangup();
             $call->status = 'complete';
             $call->save();
-            return response($resp,200)->header('Content-Type','text/xml');
+            return response($resp, 200)->header('Content-Type', 'text/xml');
         }
 
         $g = $resp->gather([
-            'input'=>'speech',
-            'speechTimeout'=>'auto',
-            'timeout'=>8,
-            'action'=>route('twilio.handleSpeech', ['sid'=>$sid]),
-            'method'=>'POST',
+            'input' => 'speech',
+            'speechTimeout' => 'auto',
+            'timeout' => 8,
+            'action' => route('twilio.handleSpeech', ['sid' => $sid]),
+            'method' => 'POST',
         ]);
-        $g->say($speak, ['voice'=>'Polly.Joanna']);
+        $g->say($speak, ['voice' => 'Polly.Joanna']);
 
-        $resp->say("If I don't hear anything I'll repeat.", ['voice'=>'Polly.Joanna']);
-        $resp->redirect(route('twilio.converse', ['sid'=>$sid]));
+        $resp->say("If I don't hear anything I'll repeat.", ['voice' => 'Polly.Joanna']);
+        $resp->redirect(route('twilio.converse', ['sid' => $sid]));
 
-        return response($resp,200)->header('Content-Type','text/xml');
+        return response($resp, 200)->header('Content-Type', 'text/xml');
     }
 
-    // Outbound helper (unchanged)
-    public function outbound($phone)
-    {
-        $twilio = new \Twilio\Rest\Client(env('TWILIO_SID'), env('TWILIO_TOKEN'));
-        $call = $twilio->calls->create(
-            $phone,
-            env('TWILIO_NUMBER'),
-            ['url' => route('twilio.incoming')]
-        );
-        SurveyCall::create(['phone'=>$phone,'call_sid'=>$call->sid]);
-        return back()->with('status','Call placed');
-    }
-
-    // Persist store fields safely
+    // Persist only allowed store fields safely
     private function persistStoreFields(SurveyCall $call, array $store)
     {
-        $allowed = ['name','email','mobile','dob'];
+        $allowed = ['name','email','mobile'];
         $update = [];
         foreach ($store as $k => $v) {
             $k = strtolower($k);
@@ -233,39 +216,45 @@ class VoiceController extends Controller
         if (!empty($update)) $call->update($update);
     }
 
-    // store latest speech into qN_speech heuristically (non-fatal)
+    // Heuristic: write raw transcript into first empty qN_speech column (if schema exists)
     private function storeLatestSpeechColumn(SurveyCall $call, string $speech)
     {
-        for ($i=1;$i<=5;$i++) {
+        for ($i = 1; $i <= 5; $i++) {
             $col = "q{$i}_speech";
-            if (method_exists($call,'getTable') && \Schema::hasColumn($call->getTable(), $col)) {
-                if (empty($call->{$col})) {
-                    $call->{$col} = $speech;
-                    break;
+            try {
+                if (\Schema::hasColumn($call->getTable(), $col)) {
+                    if (empty($call->{$col})) {
+                        $call->{$col} = $speech;
+                        break;
+                    }
                 }
+            } catch (\Throwable $e) {
+                // ignore schema checks errors
+                break;
             }
         }
     }
 
-    // system instruction for model
+    // System instruction for the model: strict JSON-only contract
     private function systemInstruction(): string
     {
         return implode("\n", [
-            "You are Joanna, a polite telephone agent whose job is to capture lead details (name,email,mobile,dob).",
-            "Respond ONLY with a JSON object and nothing else, in the exact form: {\"speak\":\"...\",\"done\":true|false,\"store\":{}}.",
-            "'speak' should be <= 40 words, natural, concise. 'store' may include fields to persist (name,email,mobile,dob).",
-            "Do not include any extra commentary or explanation outside the JSON.",
+            "You are Joanna, a short, polite telephone agent. Your job is to capture basic lead details (name, email, mobile).",
+            "When asked, ALWAYS reply EXACTLY with JSON only and nothing else, in the form:",
+            '{"speak":"<text to say>", "done": true|false, "store": {"name":"...","email":"...","mobile":"..."} }',
+            "'speak' must be natural and <= 40 words. 'done' true means end the call after speaking.",
+            "Do not output explanations or other text outside the JSON. If you cannot parse user input, ask a clear follow-up in 'speak'."
         ]);
     }
 
-    // extract first JSON block from assistant text
+    // Extract first JSON object from assistant text (robust)
     private function safeJsonDecode(string $text)
     {
         $start = strpos($text, '{');
         $end = strrpos($text, '}');
         if ($start === false || $end === false || $end <= $start) return null;
-        $jsonText = substr($text, $start, $end - $start + 1);
-        $decoded = json_decode($jsonText, true);
+        $json = substr($text, $start, $end - $start + 1);
+        $decoded = json_decode($json, true);
         return is_array($decoded) ? $decoded : null;
     }
 }
