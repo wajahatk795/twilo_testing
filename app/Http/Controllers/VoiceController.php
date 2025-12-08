@@ -19,7 +19,7 @@ class VoiceController extends Controller
         );
 
         $resp->say('Hi, we will ask you three quick questions.', ['voice' => 'Polly.Joanna']);
-        $resp->redirect(route('twilio.question', ['q' => 3, 'sid' => $sid]));
+        $resp->redirect(route('twilio.question', ['q' => 1, 'sid' => $sid]));
         return response($resp, 200)->header('Content-Type', 'text/xml');
     }
 
@@ -183,4 +183,50 @@ class VoiceController extends Controller
 
         return response($resp, 200)->header('Content-Type', 'text/xml');
     }
+}
+
+
+    public function outbound($phone)
+    {
+        $twilio = new \Twilio\Rest\Client(env('TWILIO_SID'), env('TWILIO_TOKEN'));
+
+        $call = $twilio->calls->create(
+            $phone,
+            env('TWILIO_NUMBER'),
+            ['url' => route('twilio.incoming')]
+        );
+
+        SurveyCall::create([
+            'phone' => $phone,
+            'call_sid' => $call->sid
+        ]);
+
+        return back()->with('status', 'Call placed');
+    }
+
+    public function openaiTest()
+    {
+        try {
+            $result = \OpenAI\Laravel\Facades\OpenAI::chat()->create([
+                'model' => 'gpt-3.5-turbo',
+                'temperature' => 0,
+                'messages' => [
+                    ['role' => 'user', 'content' => 'Say hello in one word']
+                ],
+                'max_tokens' => 5,
+            ]);
+
+            return response()->json([
+                'status' => ' OpenAI WORKING',
+                'reply'  => $result->choices[0]->message->content,
+            ]);
+
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status' => ' OpenAI FAILED',
+                'error'  => $e->getMessage(),
+            ], 500);
+        }
+    }
+
 }
