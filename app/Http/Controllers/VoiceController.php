@@ -76,38 +76,36 @@ class VoiceController extends Controller
                 return response($resp, 200)->header('Content-Type', 'text/xml');
             }
 
-            // ------------------ OpenAI extraction ------------------
-            $systemPrompt = match($q) {
-                2 => "Combine the spelled letters into a valid email address. Return only the email.",
-                3 => "Return only digits from the spoken input. No words, no punctuation.",
-                default => "Return only the extracted answer."
-            };
+            // Decide extraction
+            $answer = $speech;
 
-            try {
-                $ai = OpenAIClient::chat()->create([
-                    'model' => 'gpt-3.5-turbo',
-                    'temperature' => 0,
-                    'max_tokens' => 40,
-                    'messages' => [
-                        ['role' => 'system', 'content' => $systemPrompt],
-                        ['role' => 'user', 'content' => "Question $q speech: $speech"]
-                    ]
-                ]);
+            if ($q === 2) {
+                // EMAIL → Use OpenAI to combine spelled letters
+                try {
+                    $ai = OpenAIClient::chat()->create([
+                        'model' => 'gpt-3.5-turbo',
+                        'temperature' => 0,
+                        'max_tokens' => 40,
+                        'messages' => [
+                            ['role' => 'system', 'content' => "Combine the spelled letters into a valid email address. Return only the email."],
+                            ['role' => 'user', 'content' => "Speech: $speech"]
+                        ]
+                    ]);
 
-                if (!isset($ai->choices[0]->message->content)) {
-                    throw new \Exception("OpenAI returned no choices");
+                    $answer = trim($ai->choices[0]->message->content ?? $speech);
+
+                } catch (\Throwable $e) {
+                    \Log::error("🔥 OPENAI ERROR", [
+                        'sid' => $sid,
+                        'speech' => $speech,
+                        'error' => $e->getMessage()
+                    ]);
                 }
+            }
 
-                $answer = trim($ai->choices[0]->message->content);
-
-            } catch (\Throwable $e) {
-                \Log::error("🔥 OPENAI ERROR", [
-                    'sid' => $sid,
-                    'speech' => $speech,
-                    'error' => $e->getMessage()
-                ]);
-                // fallback to raw speech
-                $answer = $speech;
+            if ($q === 3) {
+                // PHONE → Remove all non-digit characters
+                $answer = preg_replace('/\D/', '', $speech);
             }
 
             // -------------- Confirmation step ------------------
