@@ -40,20 +40,18 @@ class VoiceController extends Controller
 
         $gather = $resp->gather([
             'input' => 'speech',
-            'speechTimeout' => 'auto',
-            'timeout' => 8,
+            'speechTimeout' => 'auto',   // User can speak longer
+            'timeout' => 15,             // Give them 15 seconds
             'action' => route('twilio.handle', ['q' => $q, 'sid' => $sid]),
             'method' => 'POST',
         ]);
 
         $gather->say($prompts[$q], ['voice' => 'Polly.Joanna']);
 
-        //  NO fallback here — Twilio will return to handle()
-
         return response($resp, 200)->header('Content-Type', 'text/xml');
     }
 
-    public function handle(\Illuminate\Http\Request $request)
+    public function handle(Request $request)
     {
         $resp = new \Twilio\TwiML\VoiceResponse();
 
@@ -68,21 +66,33 @@ class VoiceController extends Controller
                 return response($resp, 200)->header('Content-Type', 'text/xml');
             }
 
-            //  OpenAI in SAFE MODE (cannot exceed size)
+            // Extract clean data using OpenAI
             $res = OpenAIClient::chat()->create([
                 'model' => 'gpt-3.5-turbo',
                 'temperature' => 0,
-                'max_tokens' => 20,
+                'max_tokens' => 30,
                 'messages' => [
-                    ['role' => 'system', 'content' => 'Return only the extracted value.'],
-                    ['role' => 'user', 'content' => "Question $q speech: $speech"]
+                    ['role' => 'system', 'content' => 'Return only the extracted value. No explanation.'],
+                    ['role' => 'user', 'content' => "Q$q Speech: $speech"]
                 ],
             ]);
 
-            $answer = substr(trim($res->choices[0]->message->content ?? 'unknown'), 0, 50);
+            $answer = trim($res->choices[0]->message->content ?? '');
 
             $call = SurveyCall::where('call_sid', $sid)->first();
 
+            if ($q === 2) {
+                // ------------------------
+                // ✅ EMAIL VALIDATION
+                // ------------------------
+                if (!filter_var($answer, FILTER_VALIDATE_EMAIL)) {
+                    $resp->say("The email you provided is not valid. Please try again.");
+                    $resp->redirect(route('twilio.question', ['q' => 2, 'sid' => $sid]));
+                    return response($resp, 200)->header('Content-Type', 'text/xml');
+                }
+            }
+
+            // Save to database
             if ($call) {
                 match ($q) {
                     1 => $call->update(['name' => $answer]),
@@ -91,18 +101,17 @@ class VoiceController extends Controller
                 };
             }
 
+            // Go to next question
             if ($q < 3) {
                 $resp->redirect(route('twilio.question', ['q' => $q + 1, 'sid' => $sid]));
             } else {
-                $resp->say('Thank you, we have everything we need. Goodbye.');
+                $resp->say('Thank you. Goodbye.');
                 $resp->hangup();
             }
 
         } catch (\Throwable $e) {
-            //  CRITICAL: Never allow Laravel to output HTML
-            \Log::error('TWILIO HANDLE ERROR: ' . $e->getMessage());
-
-            $resp->say("A system error occurred. Goodbye.");
+            \Log::error('TWILIO ERROR: ' . $e->getMessage());
+            $resp->say('A system error occurred. Goodbye.');
             $resp->hangup();
         }
 
