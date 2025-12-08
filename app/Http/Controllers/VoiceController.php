@@ -9,7 +9,7 @@ use OpenAI\Laravel\Facades\OpenAI as OpenAIClient;
 
 class VoiceController extends Controller
 {
-    // Incoming call: create record and jump into the AI-driven flow
+    // Incoming call: create record (or find) and start at step 1
     public function incoming(Request $request)
     {
         \Log::info('TWILIO INCOMING', $request->all());
@@ -22,271 +22,237 @@ class VoiceController extends Controller
             [
                 'phone' => $from,
                 'status' => 'started',
-                'conversation' => json_encode([['role'=>'system','content'=>$this->systemInstruction()]]),
+                'current_step' => 1,
+                'conversation' => json_encode([['role'=>'system','content'=>'lead-capture session']])
             ]
         );
 
         $resp = new VoiceResponse();
-        $resp->say("Hi — thank you for answering. I have a few quick questions to capture your details.", ['voice' => 'Polly.Joanna']);
+        $resp->say("Hi — thanks for taking this call. I have three quick questions.", ['voice' => 'Polly.Joanna']);
         $resp->pause(['length' => 1]);
-        $resp->redirect(route('twilio.converse', ['sid' => $sid]));
+
+        // Redirect to question route for the first step
+        $resp->redirect(route('twilio.question', ['sid' => $sid]));
         return response($resp, 200)->header('Content-Type', 'text/xml');
     }
 
-    // Converse: ask the model what to say next. Model must return JSON only.
-    public function converse(Request $request)
+    // Show the current question for this call (one-by-one)
+    public function question(Request $request)
     {
         $sid = $request->input('sid');
         $call = SurveyCall::where('call_sid', $sid)->first();
 
         if (!$call) {
             $resp = new VoiceResponse();
-            $resp->say('Call record not found. Goodbye.', ['voice' => 'Polly.Joanna']);
+            $resp->say("Call record error. Goodbye.", ['voice'=>'Polly.Joanna']);
             $resp->hangup();
-            return response($resp, 200)->header('Content-Type', 'text/xml');
+            return response($resp,200)->header('Content-Type','text/xml');
         }
 
-        $history = json_decode($call->conversation ?: '[]', true);
-        $historyForApi = $history;
-        $historyForApi[] = [
-            'role' => 'user',
-            'content' => "Decide the next concise phrase to say to collect lead info (name, phone, email). " .
-                         "REPLY ONLY with JSON: {\"speak\":\"...\",\"done\":true|false,\"store\":{}}. " .
-                         "Keep 'speak' <= 40 words. 'store' may contain name,email,mobile."
+        $step = (int)($call->current_step ?? 1);
+        $resp = new VoiceResponse();
+
+        // Prompts for each step
+        $prompts = [
+            1 => "Please tell me your full name after the beep.",
+            2 => "Please say your phone number, one digit at a time. For example: five five five one two three four five six seven.",
+            3 => "Please spell your email address slowly, one character at a time. For example: j o h n dot d o e at g m a i l dot c o m.",
         ];
 
-        try {
-            $res = OpenAIClient::chat()->create([
-                'model' => env('OPENAI_MODEL', 'gpt-4o-mini'),
-                'temperature' => (float) env('OPENAI_TEMP', 0.2),
-                'max_tokens' => 120,
-                'messages' => $historyForApi,
-            ]);
-        } catch (\Throwable $e) {
-            \Log::error('OpenAI converse error: '.$e->getMessage());
-            $resp = new VoiceResponse();
-            $resp->say("Sorry, a system error occurred. Goodbye.", ['voice' => 'Polly.Joanna']);
-            $resp->hangup();
-            return response($resp, 200)->header('Content-Type', 'text/xml');
-        }
+        $prompt = $prompts[$step] ?? "Thank you.";
 
-        $assistantText = trim($res->choices[0]->message->content ?? '');
-        $history[] = ['role' => 'assistant', 'content' => $assistantText];
-        $call->conversation = json_encode($history);
-        $call->save();
-
-        $json = $this->safeJsonDecode($assistantText);
-
-        if (!$json || !isset($json['speak'])) {
-            $speak = "Please tell me your full name.";
-            $done = false;
-            $store = [];
-        } else {
-            $speak = $json['speak'];
-            $done = !empty($json['done']);
-            $store = $json['store'] ?? [];
-        }
-
-        if (!empty($store)) $this->persistStoreFields($call, $store);
-
-        $resp = new VoiceResponse();
         $g = $resp->gather([
             'input' => 'speech',
             'speechTimeout' => 'auto',
             'timeout' => 8,
-            'action' => route('twilio.handleSpeech', ['sid' => $sid]),
+            'action' => route('twilio.handle', ['sid' => $sid]),
             'method' => 'POST',
         ]);
-        $g->say($speak, ['voice' => 'Polly.Joanna']);
 
-        if ($done) {
-            $resp->say("Okay, thank you. Goodbye.", ['voice' => 'Polly.Joanna']);
-            $resp->hangup();
-            $call->status = 'complete';
-            $call->save();
-        } else {
-            $resp->say("If I don't hear anything I'll repeat.", ['voice' => 'Polly.Joanna']);
-            $resp->redirect(route('twilio.converse', ['sid' => $sid]));
-        }
+        // Ask the step prompt inside gather so Twilio listens after speaking
+        $g->say($prompt, ['voice' => 'Polly.Joanna']);
 
-        return response($resp, 200)->header('Content-Type', 'text/xml');
+        // Fallback if nothing captured — repeat same question
+        $resp->say("We didn't hear anything. Let's try again.", ['voice' => 'Polly.Joanna']);
+        $resp->redirect(route('twilio.question', ['sid' => $sid]));
+
+        return response($resp,200)->header('Content-Type','text/xml');
     }
 
-    // Handle speech from Twilio -> append to conversation -> ask model for next step
-    public function handleSpeech(Request $request)
+    // Handle captured speech, use OpenAI to extract/normalize the single field for the current step
+    public function handle(Request $request)
     {
-        $sid = $request->input('sid');
+        $sid    = $request->input('sid');
         $speech = trim((string)$request->input('SpeechResult', ''));
-
-        \Log::info('TWILIO HANDLE SPEECH', compact('sid','speech'));
+        \Log::info('TWILIO HANDLE', ['sid'=>$sid,'speech'=>$speech]);
 
         $call = SurveyCall::where('call_sid', $sid)->first();
         if (!$call) {
             $resp = new VoiceResponse();
-            $resp->say('Call record missing. Goodbye.', ['voice' => 'Polly.Joanna']);
+            $resp->say("Call record missing. Goodbye.", ['voice'=>'Polly.Joanna']);
             $resp->hangup();
-            return response($resp, 200)->header('Content-Type', 'text/xml');
+            return response($resp,200)->header('Content-Type','text/xml');
         }
 
-        $history = json_decode($call->conversation ?: '[]', true);
-        $history[] = ['role' => 'user', 'content' => $speech];
-        $call->conversation = json_encode($history);
-        $this->storeLatestSpeechColumn($call, $speech); // safe heuristic
-        $call->save();
+        $step = (int)($call->current_step ?? 1);
 
-        $userPrompt = "User replied: " . $speech . ". Decide the next short phrase to say. REPLY ONLY with JSON: " .
-                      '{"speak":"...","done":true|false,"store":{}}. Keep speak concise (<=40 words).';
-
-        $historyForApi = json_decode($call->conversation ?: '[]', true);
-        $historyForApi[] = ['role'=>'user','content'=>$userPrompt];
-
-        try {
-            $res = OpenAIClient::chat()->create([
-                'model' => env('OPENAI_MODEL', 'gpt-4o-mini'),
-                'temperature' => (float) env('OPENAI_TEMP', 0.25),
-                'max_tokens' => 140,
-                'messages' => $historyForApi,
-            ]);
-        } catch (\Throwable $e) {
-            \Log::error('OpenAI handleSpeech error: '.$e->getMessage());
+        if (empty($speech)) {
+            // No speech captured — repeat question
             $resp = new VoiceResponse();
-            $resp->say("Sorry, something went wrong. Goodbye.", ['voice' => 'Polly.Joanna']);
-            $resp->hangup();
-            return response($resp, 200)->header('Content-Type', 'text/xml');
+            $resp->say("I didn't catch that. Let's try again.", ['voice'=>'Polly.Joanna']);
+            $resp->redirect(route('twilio.question', ['sid' => $sid]));
+            return response($resp,200)->header('Content-Type','text/xml');
         }
 
-        $assistantText = trim($res->choices[0]->message->content ?? '');
-        $history[] = ['role' => 'assistant', 'content' => $assistantText];
-        $call->conversation = json_encode($history);
-        $call->save();
+        // Save raw transcript for debugging
+        $this->saveRawSpeech($call, $step, $speech);
 
-        $json = $this->safeJsonDecode($assistantText);
+        // Use OpenAI to extract a clean value for the current step
+        $fieldName = $this->stepFieldName($step);
+        $extracted = $this->openaiExtract($speech, $fieldName);
 
-        if (!$json || !isset($json['speak'])) {
-            $speak = "Sorry, I didn't get that. Could you repeat?";
-            $done = false;
-            $store = [];
+        if ($extracted === null || $extracted === 'unknown') {
+            // Ask to repeat for this step if extraction failed
+            $resp = new VoiceResponse();
+            $resp->say("Sorry, I couldn't understand that clearly. Let's try that again.", ['voice'=>'Polly.Joanna']);
+            $resp->redirect(route('twilio.question', ['sid' => $sid]));
+            return response($resp,200)->header('Content-Type','text/xml');
+        }
+
+        // Persist the extracted value to DB
+        $updates = [];
+        if ($fieldName === 'mobile') {
+            $updates['mobile'] = preg_replace('/\D/', '', $extracted);
+        } elseif ($fieldName === 'email') {
+            $updates['email'] = $extracted;
         } else {
-            $speak = $json['speak'];
-            $done = !empty($json['done']);
-            $store = $json['store'] ?? [];
+            $updates[$fieldName] = $extracted;
+        }
+        $call->update($updates);
+
+        // Advance step
+        if ($step < 3) {
+            $call->current_step = $step + 1;
+            $call->save();
+
+            $resp = new VoiceResponse();
+            $resp->say("Thanks.", ['voice'=>'Polly.Joanna']);
+            $resp->pause(['length' => 0.5]);
+            $resp->redirect(route('twilio.question', ['sid' => $sid]));
+            return response($resp,200)->header('Content-Type','text/xml');
         }
 
-        if (!empty($store)) $this->persistStoreFields($call, $store);
+        // Step 3 completed → finish
+        $call->status = 'complete';
+        $call->save();
 
         $resp = new VoiceResponse();
-        if ($done) {
-            $resp->say($speak, ['voice' => 'Polly.Joanna']);
-            $resp->say("Thank you. Goodbye.", ['voice' => 'Polly.Joanna']);
-            $resp->hangup();
-            $call->status = 'complete';
-            $call->save();
-            return response($resp, 200)->header('Content-Type', 'text/xml');
-        }
+        // Summarize captured fields (read digits for mobile)
+        $name = $call->name ?? 'not provided';
+        $mobile = $call->mobile ? implode(' ', str_split($call->mobile)) : 'not provided';
+        $email = $call->email ?? 'not provided';
 
-        $g = $resp->gather([
-            'input' => 'speech',
-            'speechTimeout' => 'auto',
-            'timeout' => 8,
-            'action' => route('twilio.handleSpeech', ['sid' => $sid]),
-            'method' => 'POST',
-        ]);
-        $g->say($speak, ['voice' => 'Polly.Joanna']);
+        // Use SSML for mobile digits
+        $resp->say("Thank you. I have recorded the following details.", ['voice'=>'Polly.Joanna']);
+        $resp->say("Name: $name.", ['voice'=>'Polly.Joanna']);
+        $resp->say("<speak>Phone: <say-as interpret-as=\"digits\">{$call->mobile}</say-as>.</speak>", ['voice'=>'Polly.Joanna']);
+        $resp->say("Email: $email.", ['voice'=>'Polly.Joanna']);
+        $resp->say("That's all—thanks for your time. Goodbye.", ['voice'=>'Polly.Joanna']);
+        $resp->hangup();
 
-        $resp->say("If I don't hear anything I'll repeat.", ['voice' => 'Polly.Joanna']);
-        $resp->redirect(route('twilio.converse', ['sid' => $sid]));
-
-        return response($resp, 200)->header('Content-Type', 'text/xml');
+        return response($resp,200)->header('Content-Type','text/xml');
     }
 
+    // Outbound helper (keep available if you need it)
     public function outbound($phone)
     {
         try {
-            $twilio = new \Twilio\Rest\Client(
-                env('TWILIO_SID'),
-                env('TWILIO_TOKEN')
-            );
-
+            $twilio = new \Twilio\Rest\Client(env('TWILIO_SID'), env('TWILIO_TOKEN'));
             $call = $twilio->calls->create(
                 $phone,
                 env('TWILIO_NUMBER'),
                 ['url' => route('twilio.incoming')]
             );
+            SurveyCall::create(['phone' => $phone, 'call_sid' => $call->sid]);
+            return response()->json(['status'=>'ok','sid'=>$call->sid]);
+        } catch (\Throwable $e) {
+            \Log::error('OUTBOUND ERROR: '.$e->getMessage());
+            return response()->json(['status'=>'error','error'=>$e->getMessage()],500);
+        }
+    }
 
-            SurveyCall::create([
-                'phone' => $phone,
-                'call_sid' => $call->sid
-            ]);
+    /* ---------------- helpers ---------------- */
 
-            return response()->json([
-                'status' => 'success',
-                'message' => 'Outbound call started',
-                'sid' => $call->sid
+    // Map step number to DB field name
+    private function stepFieldName(int $step): string
+    {
+        return match($step) {
+            1 => 'name',
+            2 => 'mobile',
+            3 => 'email',
+            default => 'name',
+        };
+    }
+
+    // Save raw speech to qN_speech column if available
+    private function saveRawSpeech(SurveyCall $call, int $step, string $speech)
+    {
+        $col = "q{$step}_speech";
+        try {
+            if (\Schema::hasColumn($call->getTable(), $col)) {
+                $call->{$col} = $speech;
+                $call->save();
+            }
+        } catch (\Throwable $e) {
+            // ignore schema issues
+        }
+    }
+
+    // Ask OpenAI to extract the single field (returns string or 'unknown' or null)
+    private function openaiExtract(string $speech, string $field)
+    {
+        // Create a focused prompt per field
+        $prompts = [
+            'name' => "Extract the person's full name from this speech. If not found return \"unknown\". Output only the name.",
+            'mobile' => "Extract only the phone number digits from this speech. Remove any spaces or punctuation. If no digits, return \"unknown\".",
+            'email' => "Extract the email address from this speech. Convert spoken 'at' and 'dot' to '@' and '.' and output only the email address. If no email, return \"unknown\".",
+        ];
+
+        $system = "You are a tool that extracts a single value from the user's spoken text according to the instruction. Return only the value and nothing else.";
+
+        $instruction = $prompts[$field] ?? $prompts['name'];
+
+        try {
+            $res = OpenAIClient::chat()->create([
+                'model' => env('OPENAI_MODEL', 'gpt-4o-mini'),
+                'temperature' => 0.0,
+                'max_tokens' => 40,
+                'messages' => [
+                    ['role'=>'system','content'=>$system],
+                    ['role'=>'user','content'=> $instruction . "\n\nSpeech: " . $speech],
+                ],
             ]);
         } catch (\Throwable $e) {
-            return response()->json([
-                'status' => 'error',
-                'error' => $e->getMessage()
-            ], 500);
+            \Log::error('OpenAI extract error: '.$e->getMessage());
+            return null;
         }
-    }
 
-    // Persist only allowed store fields safely
-    private function persistStoreFields(SurveyCall $call, array $store)
-    {
-        $allowed = ['name','email','mobile'];
-        $update = [];
-        foreach ($store as $k => $v) {
-            $k = strtolower($k);
-            if (in_array($k, $allowed)) {
-                $val = trim((string)$v);
-                if ($k === 'mobile') $val = preg_replace('/\D/','',$val);
-                if ($k === 'email') $val = filter_var($val, FILTER_SANITIZE_EMAIL);
-                $update[$k] = $val;
-            }
+        $out = trim($res->choices[0]->message->content ?? '');
+        // sanitize outputs
+        if ($field === 'mobile') {
+            $digits = preg_replace('/\D/','',$out);
+            return $digits === '' ? 'unknown' : $digits;
         }
-        if (!empty($update)) $call->update($update);
-    }
-
-    // Heuristic: write raw transcript into first empty qN_speech column (if schema exists)
-    private function storeLatestSpeechColumn(SurveyCall $call, string $speech)
-    {
-        for ($i = 1; $i <= 5; $i++) {
-            $col = "q{$i}_speech";
-            try {
-                if (\Schema::hasColumn($call->getTable(), $col)) {
-                    if (empty($call->{$col})) {
-                        $call->{$col} = $speech;
-                        break;
-                    }
-                }
-            } catch (\Throwable $e) {
-                // ignore schema checks errors
-                break;
-            }
+        if ($field === 'email') {
+            $candidate = strtolower(trim($out));
+            // convert common spoken tokens if model didn't
+            $candidate = str_replace([' at ',' AT '],'@',$candidate);
+            $candidate = str_replace([' dot ',' DOT '],'.',$candidate);
+            $candidate = preg_replace('/\s+/', '', $candidate);
+            return filter_var($candidate, FILTER_VALIDATE_EMAIL) ? $candidate : 'unknown';
         }
-    }
-
-    // System instruction for the model: strict JSON-only contract
-    private function systemInstruction(): string
-    {
-        return implode("\n", [
-            "You are Joanna, a short, polite telephone agent. Your job is to capture basic lead details (name, email, mobile).",
-            "When asked, ALWAYS reply EXACTLY with JSON only and nothing else, in the form:",
-            '{"speak":"<text to say>", "done": true|false, "store": {"name":"...","email":"...","mobile":"..."} }',
-            "'speak' must be natural and <= 40 words. 'done' true means end the call after speaking.",
-            "Do not output explanations or other text outside the JSON. If you cannot parse user input, ask a clear follow-up in 'speak'."
-        ]);
-    }
-
-    // Extract first JSON object from assistant text (robust)
-    private function safeJsonDecode(string $text)
-    {
-        $start = strpos($text, '{');
-        $end = strrpos($text, '}');
-        if ($start === false || $end === false || $end <= $start) return null;
-        $json = substr($text, $start, $end - $start + 1);
-        $decoded = json_decode($json, true);
-        return is_array($decoded) ? $decoded : null;
+        // name: keep as-is but remove extraneous quotes
+        $name = trim($out, "\"' \t\n\r");
+        return $name === '' ? 'unknown' : $name;
     }
 }
