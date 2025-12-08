@@ -183,7 +183,7 @@ class VoiceController extends Controller
 
         return response($resp, 200)->header('Content-Type', 'text/xml');
     }
-}
+
 
 
     public function outbound($phone)
