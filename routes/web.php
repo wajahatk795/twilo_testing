@@ -15,6 +15,7 @@ Route::post('/twilio/question', [VoiceController::class,'question'])->name('twil
 Route::post('/twilio/handle',   [VoiceController::class,'handle'])  ->name('twilio.handle');
 Route::get('/call/{phone}',     [VoiceController::class,'outbound'])->name('twilio.outbound');
 Route::post('/twilio/confirm', [VoiceController::class, 'confirm'])->name('twilio.confirm');
+Route::post('/twilio/greeting', [VoiceController::class, 'greeting'])->name('twilio.greeting');
 
 Route::get('/openai-test', [\App\Http\Controllers\VoiceController::class, 'openaiTest']);
 

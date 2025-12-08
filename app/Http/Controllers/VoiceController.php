@@ -19,8 +19,54 @@ class VoiceController extends Controller
             ['phone' => request('From')]
         );
 
-        $resp->say('Hi, we will ask you three quick questions.', ['voice' => 'Polly.Joanna']);
-        $resp->redirect(route('twilio.question', ['q' => 1, 'sid' => $sid]));
+        // Professional AI greeting flow
+        $gather = $resp->gather([
+            'input' => 'speech',
+            'speechTimeout' => 'auto',
+            'timeout' => 5, // wait 5 seconds for user response
+            'action' => route('twilio.greeting', ['sid' => $sid, 'attempt' => 1]),
+            'method' => 'POST',
+        ]);
+
+        $gather->say("Hello, I am Polly Joanna.", ['voice' => 'Polly.Joanna']);
+
+        return response($resp, 200)->header('Content-Type', 'text/xml');
+    }
+
+    public function greeting(Request $request)
+    {
+        $resp = new VoiceResponse();
+        $sid = $request->input('sid');
+        $attempt = (int) $request->input('attempt', 1);
+        $speech = strtolower(trim((string) $request->input('SpeechResult')));
+
+        if ($speech && str_contains($speech, 'hello')) {
+            // User responded, proceed to first question
+            $resp->say("Great! Let's get started with a few quick questions.", ['voice' => 'Polly.Joanna']);
+            $resp->redirect(route('twilio.question', ['q' => 1, 'sid' => $sid]));
+        } else {
+            if ($attempt < 3) {
+                // Repeat greeting politely
+                $gather = $resp->gather([
+                    'input' => 'speech',
+                    'speechTimeout' => 'auto',
+                    'timeout' => 5,
+                    'action' => route('twilio.greeting', ['sid' => $sid, 'attempt' => $attempt + 1]),
+                    'method' => 'POST',
+                ]);
+
+                $message = match($attempt) {
+                    1 => "Hello?",
+                    2 => "Hello? I am Polly Joanna.",
+                };
+
+                $gather->say($message, ['voice' => 'Polly.Joanna']);
+            } else {
+                // End call after 3 failed attempts
+                $resp->say("Since we did not hear from you, we will end the call. Goodbye.", ['voice' => 'Polly.Joanna']);
+                $resp->hangup();
+            }
+        }
 
         return response($resp, 200)->header('Content-Type', 'text/xml');
     }
