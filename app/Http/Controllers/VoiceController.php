@@ -78,34 +78,19 @@ class VoiceController extends Controller
 
             // Decide extraction
             $answer = $speech;
+            $spokenAnswer = $speech; // What Twilio will read out
 
             if ($q === 2) {
-                // EMAIL → Use OpenAI to combine spelled letters
-                try {
-                    $ai = OpenAIClient::chat()->create([
-                        'model' => 'gpt-3.5-turbo',
-                        'temperature' => 0,
-                        'max_tokens' => 40,
-                        'messages' => [
-                            ['role' => 'system', 'content' => "Combine the spelled letters into a valid email address. Return only the email."],
-                            ['role' => 'user', 'content' => "Speech: $speech"]
-                        ]
-                    ]);
-
-                    $answer = trim($ai->choices[0]->message->content ?? $speech);
-
-                } catch (\Throwable $e) {
-                    \Log::error("🔥 OPENAI ERROR", [
-                        'sid' => $sid,
-                        'speech' => $speech,
-                        'error' => $e->getMessage()
-                    ]);
-                }
+                // EMAIL → reconstruct manually from spelled letters
+                $clean = strtolower(str_replace([' ', ',', 'dot', 'at'], ['', '', '.', '@'], $speech));
+                $answer = preg_replace('/[^a-z0-9@._-]/', '', $clean);
+                $spokenAnswer = str_replace('@', ' at ', str_replace('.', ' dot ', $answer));
             }
 
             if ($q === 3) {
-                // PHONE → Remove all non-digit characters
+                // PHONE → remove all non-digit characters
                 $answer = preg_replace('/\D/', '', $speech);
+                $spokenAnswer = implode(' ', str_split($answer)); // read digit by digit
             }
 
             // -------------- Confirmation step ------------------
@@ -118,7 +103,7 @@ class VoiceController extends Controller
                     'sid' => $sid,
                     'answer' => urlencode($answer)
                 ])
-            ])->say("You said: $answer. Is that correct? Say Yes or No.");
+            ])->say("You said: $spokenAnswer. Is that correct? Say Yes or No.");
 
             return response($resp, 200)->header('Content-Type', 'text/xml');
 
@@ -128,24 +113,6 @@ class VoiceController extends Controller
             $resp->hangup();
             return response($resp, 200)->header('Content-Type', 'text/xml');
         }
-    }
-
-    public function outbound($phone)
-    {
-        $twilio = new \Twilio\Rest\Client(env('TWILIO_SID'), env('TWILIO_TOKEN'));
-
-        $call = $twilio->calls->create(
-            $phone,
-            env('TWILIO_NUMBER'),
-            ['url' => route('twilio.incoming')]
-        );
-
-        SurveyCall::create([
-            'phone' => $phone,
-            'call_sid' => $call->sid
-        ]);
-
-        return back()->with('status', 'Call placed');
     }
 
     public function confirm(Request $request)
@@ -219,6 +186,24 @@ class VoiceController extends Controller
         }
 
         return response($resp, 200)->header('Content-Type', 'text/xml');
+    }
+
+    public function outbound($phone)
+    {
+        $twilio = new \Twilio\Rest\Client(env('TWILIO_SID'), env('TWILIO_TOKEN'));
+
+        $call = $twilio->calls->create(
+            $phone,
+            env('TWILIO_NUMBER'),
+            ['url' => route('twilio.incoming')]
+        );
+
+        SurveyCall::create([
+            'phone' => $phone,
+            'call_sid' => $call->sid
+        ]);
+
+        return back()->with('status', 'Call placed');
     }
 
     public function openaiTest()
