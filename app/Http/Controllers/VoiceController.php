@@ -34,14 +34,14 @@ class VoiceController extends Controller
 
         $prompts = [
             1 => 'Please say your full name after the beep.',
-            2 => 'Please spell your email address.',
-            3 => 'Please say your phone number, for example 555 123 4567.',
+            2 => 'Please spell your email address, one character at a time. For example: a l e x dot j o h n s o n at g m a i l dot c o m',
+            3 => 'Please say your phone number, one digit at a time. For example: 5 5 5 1 2 3 4 5 6 7',
         ];
 
         $gather = $resp->gather([
             'input' => 'speech',
-            'speechTimeout' => 'auto',   // User can speak longer
-            'timeout' => 15,             // Give them 15 seconds
+            'speechTimeout' => 'auto',
+            'timeout' => 20,
             'action' => route('twilio.handle', ['q' => $q, 'sid' => $sid]),
             'method' => 'POST',
         ]);
@@ -60,41 +60,38 @@ class VoiceController extends Controller
             $sid    = $request->input('sid');
             $speech = trim((string) $request->input('SpeechResult'));
 
-            // ------------------ LOG RAW SPEECH ------------------
             \Log::info("📢 RAW SPEECH", [
                 'sid' => $sid,
                 'q' => $q,
                 'speech' => $speech,
             ]);
 
-            // Save transcript
+            // Save raw transcript
             SurveyCall::where('call_sid', $sid)
                 ->update(["q{$q}_speech" => $speech]);
 
-            // If no speech heard
             if (!$speech) {
                 $resp->say("I did not hear anything. Let's try again.");
                 $resp->redirect(route('twilio.question', ['q' => $q, 'sid' => $sid]));
                 return response($resp, 200)->header('Content-Type', 'text/xml');
             }
 
-            // ------------------ OPENAI SAFE REQUEST ------------------
+            // ------------------ OpenAI extraction ------------------
+            $systemPrompt = match($q) {
+                2 => "Combine the spelled letters into a valid email address. Return only the email.",
+                3 => "Return only digits from the spoken input. No words, no punctuation.",
+                default => "Return only the extracted answer."
+            };
+
             try {
                 $ai = OpenAIClient::chat()->create([
                     'model' => 'gpt-3.5-turbo',
                     'temperature' => 0,
                     'max_tokens' => 40,
                     'messages' => [
-                        [
-                            'role' => 'system',
-                            'content' =>
-                                "Extract ONLY the clean answer.\n" .
-                                "If it's email → return a valid email.\n" .
-                                "If it's phone → return only digits.\n" .
-                                "No extra words."
-                        ],
+                        ['role' => 'system', 'content' => $systemPrompt],
                         ['role' => 'user', 'content' => "Question $q speech: $speech"]
-                    ],
+                    ]
                 ]);
 
                 if (!isset($ai->choices[0]->message->content)) {
@@ -105,16 +102,15 @@ class VoiceController extends Controller
 
             } catch (\Throwable $e) {
                 \Log::error("🔥 OPENAI ERROR", [
-                    "sid" => $sid,
-                    "speech" => $speech,
-                    "error" => $e->getMessage()
+                    'sid' => $sid,
+                    'speech' => $speech,
+                    'error' => $e->getMessage()
                 ]);
-
-                // fallback: use raw speech
+                // fallback to raw speech
                 $answer = $speech;
             }
 
-            // -------------- ASK FOR CONFIRMATION ------------------
+            // -------------- Confirmation step ------------------
             $resp->gather([
                 'input' => 'speech',
                 'speechTimeout' => 'auto',
