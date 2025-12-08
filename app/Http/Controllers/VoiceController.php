@@ -199,6 +199,38 @@ class VoiceController extends Controller
         return response($resp, 200)->header('Content-Type', 'text/xml');
     }
 
+    public function outbound($phone)
+    {
+        try {
+            $twilio = new \Twilio\Rest\Client(
+                env('TWILIO_SID'),
+                env('TWILIO_TOKEN')
+            );
+
+            $call = $twilio->calls->create(
+                $phone,
+                env('TWILIO_NUMBER'),
+                ['url' => route('twilio.incoming')]
+            );
+
+            SurveyCall::create([
+                'phone' => $phone,
+                'call_sid' => $call->sid
+            ]);
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Outbound call started',
+                'sid' => $call->sid
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status' => 'error',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
     // Persist only allowed store fields safely
     private function persistStoreFields(SurveyCall $call, array $store)
     {
