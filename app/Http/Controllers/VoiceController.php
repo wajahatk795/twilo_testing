@@ -200,7 +200,7 @@ class VoiceController extends Controller
                 match ($q) {
                     1 => $call->update(['name' => $answer]),
                     2 => $call->update(['email' => $answer]),
-                    3 => $call->update(['phone' => $answer, 'status' => 'complete']),
+                    3 => $call->update(['mobile' => $answer, 'status' => 'complete']),
                 };
             }
 
