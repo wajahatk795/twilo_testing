@@ -13,11 +13,14 @@ return Application::configure(basePath: dirname(__DIR__))
     )
    ->withMiddleware(function (Middleware $middleware) {
         $middleware->validateCsrfTokens(except: [
-            '/twilio/incoming',
-            '/twilio/question',
-            '/twilio/handle',
-            '/twilio/confirm',
-            '/twilio/greeting',
+            // '/twilio/incoming',
+            // '/twilio/question',
+            // '/twilio/handle',
+            // '/twilio/confirm',
+            'twilio/*',
+            'twilio/incoming',
+            'twilio/converse',
+            'twilio/handleSpeech'
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

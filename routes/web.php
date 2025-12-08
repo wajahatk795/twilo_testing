@@ -10,13 +10,18 @@ Route::get('/', function () {
     return view('welcome');
 });
 
-Route::post('/twilio/incoming', [VoiceController::class,'incoming'])->name('twilio.incoming');
-Route::post('/twilio/question', [VoiceController::class,'question'])->name('twilio.question');
-Route::post('/twilio/handle',   [VoiceController::class,'handle'])  ->name('twilio.handle');
-Route::get('/call/{phone}',     [VoiceController::class,'outbound'])->name('twilio.outbound');
-Route::post('/twilio/confirm', [VoiceController::class, 'confirm'])->name('twilio.confirm');
-Route::post('/twilio/greeting', [VoiceController::class, 'greeting'])->name('twilio.greeting');
+// Route::post('/twilio/incoming', [VoiceController::class,'incoming'])->name('twilio.incoming');
+// Route::post('/twilio/question', [VoiceController::class,'question'])->name('twilio.question');
+// Route::post('/twilio/handle',   [VoiceController::class,'handle'])  ->name('twilio.handle');
+// Route::get('/call/{phone}',     [VoiceController::class,'outbound'])->name('twilio.outbound');
+// Route::post('/twilio/confirm', [VoiceController::class, 'confirm'])->name('twilio.confirm');
 
-Route::get('/openai-test', [\App\Http\Controllers\VoiceController::class, 'openaiTest']);
+Route::post('/twilio/incoming', [VoiceController::class,'incoming'])->name('twilio.incoming');
+Route::post('/twilio/converse', [VoiceController::class,'converse'])->name('twilio.converse');
+Route::post('/twilio/handleSpeech', [VoiceController::class,'handleSpeech'])->name('twilio.handleSpeech');
+Route::post('/twilio/outbound/{phone}', [VoiceController::class,'outbound'])->name('twilio.outbound');
+
+
+// Route::get('/openai-test', [\App\Http\Controllers\VoiceController::class, 'openaiTest']);
 
 
