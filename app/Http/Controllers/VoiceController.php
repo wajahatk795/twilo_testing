@@ -76,21 +76,20 @@ class VoiceController extends Controller
                 return response($resp, 200)->header('Content-Type', 'text/xml');
             }
 
-            // Decide extraction
             $answer = $speech;
-            $spokenAnswer = $speech; // What Twilio will read out
 
+            // ------------------ Email reconstruction ------------------
             if ($q === 2) {
-                // EMAIL → reconstruct manually from spelled letters
-                $clean = strtolower(str_replace([' ', ',', 'dot', 'at'], ['', '', '.', '@'], $speech));
+                $clean = strtolower($speech);
+                $clean = str_replace([' ', ','], '', $clean); // remove spaces/commas
+                $clean = str_replace(['dot'], '.', $clean);
+                $clean = str_replace(['at'], '@', $clean);
                 $answer = preg_replace('/[^a-z0-9@._-]/', '', $clean);
-                $spokenAnswer = str_replace('@', ' at ', str_replace('.', ' dot ', $answer));
             }
 
+            // ------------------ Phone reconstruction ------------------
             if ($q === 3) {
-                // PHONE → remove all non-digit characters
-                $answer = preg_replace('/\D/', '', $speech);
-                $spokenAnswer = implode(' ', str_split($answer)); // read digit by digit
+                $answer = preg_replace('/\D/', '', $speech); // only digits
             }
 
             // -------------- Confirmation step ------------------
@@ -103,7 +102,7 @@ class VoiceController extends Controller
                     'sid' => $sid,
                     'answer' => urlencode($answer)
                 ])
-            ])->say("You said: $spokenAnswer. Is that correct? Say Yes or No.");
+            ])->say("You said: $answer. Is that correct? Say Yes or No.");
 
             return response($resp, 200)->header('Content-Type', 'text/xml');
 
@@ -131,32 +130,28 @@ class VoiceController extends Controller
             'answer' => $answer
         ]);
 
-        // user said yes
         if (str_contains($speech, 'yes')) {
 
             // PHONE VALIDATION (question 3)
             if ($q === 3) {
                 $cleanPhone = preg_replace('/\D/', '', $answer);
-
                 if (strlen($cleanPhone) < 7) {
                     $resp->say("The phone number you provided is not valid. Please try again.");
                     $resp->redirect(route('twilio.question', ['q' => 3, 'sid' => $sid]));
                     return response($resp, 200)->header('Content-Type', 'text/xml');
                 }
-
                 $answer = $cleanPhone;
             }
 
             // EMAIL VALIDATION (question 2)
             if ($q === 2 && !filter_var($answer, FILTER_VALIDATE_EMAIL)) {
-                $resp->say("The email you spoke is not valid. Please try again.");
+                $resp->say("The email you spoke is not valid. Let's try again.");
                 $resp->redirect(route('twilio.question', ['q' => 2, 'sid' => $sid]));
                 return response($resp, 200)->header('Content-Type', 'text/xml');
             }
 
             // Save confirmed answer
             $call = SurveyCall::where('call_sid', $sid)->first();
-
             if ($call) {
                 match ($q) {
                     1 => $call->update(['name' => $answer]),
@@ -165,7 +160,7 @@ class VoiceController extends Controller
                 };
             }
 
-            // Move to next question
+            // Move to next question automatically
             if ($q < 3) {
                 $resp->redirect(route('twilio.question', [
                     'q' => $q + 1,
@@ -177,7 +172,7 @@ class VoiceController extends Controller
             }
 
         } else {
-            // user said no → ask question again
+            // user said no → repeat current question
             $resp->say("Okay, let's try again.");
             $resp->redirect(route('twilio.question', [
                 'q' => $q,
