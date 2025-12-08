@@ -16,6 +16,7 @@ return Application::configure(basePath: dirname(__DIR__))
             '/twilio/incoming',
             '/twilio/question',
             '/twilio/handle',
+            '/twilio/confirm',
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
