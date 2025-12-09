@@ -15,7 +15,7 @@ class EnsureAdmin
     {
         $user = Auth::user();
 
-        if (! $user || (string) $user->role !== '1') {
+        if (! $user || ! $user->role || $user->role->name !== 'admin') {
             // Not admin - redirect to home with error message
             return redirect('/')->with('error', 'Unauthorized: admin access only.');
         }

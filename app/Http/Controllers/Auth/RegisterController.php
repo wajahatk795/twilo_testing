@@ -40,7 +40,7 @@ class RegisterController extends Controller
             'name' => $validated['username'],
             'email' => $validated['email'],
             'password' => Hash::make($validated['password']),
-            'role' => '2',
+            'role_id' => 2, // 2 = user role
         ]);
 
         Auth::login($user);
