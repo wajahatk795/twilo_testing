@@ -52,21 +52,28 @@ class TenantController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
+            'username' => 'required|string|max:255|unique:users,name',
+            'email' => 'required|email|unique:users',
+            'password' => 'required|min:8|confirmed',
             'company_name' => 'required|string|max:255',
             'plan' => 'required|string|max:100',
             'questions' => 'nullable|array',
             'questions.*' => 'nullable|string|max:1000',
         ]);
+        
         DB::beginTransaction();
         try {
-            // Determine owner_id: prefer the submitted non-empty value, otherwise use the authenticated user or null
-            $ownerId = $request->input('owner_id');
-            if ($ownerId === '' || $ownerId === null) {
-                $ownerId = Auth::check() ? Auth::id() : null;
-            }
+            // Create user first
+            $user = \App\Models\User::create([
+                'name' => $data['username'],
+                'email' => $data['email'],
+                'password' => \Illuminate\Support\Facades\Hash::make($data['password']),
+                'role_id' => 2, // 2 = user role
+            ]);
 
+            // Create company (tenant) for the new user
             $tenant = Tenant::create([
-                'owner_id' => $ownerId,
+                'owner_id' => $user->id,
                 'company_name' => $data['company_name'],
                 'plan' => $data['plan'],
                 'settings' => [
@@ -88,25 +95,30 @@ class TenantController extends Controller
                     if ($fieldName === '') {
                         $fieldName = 'question_' . ($idx + 1);
                     }
-                    Question::firstOrCreate(
-                        ['tenant_id' => $tenant->id, 'prompt' => $prompt],
-                    );
+                    Question::create([
+                        'tenant_id' => $tenant->id,
+                        'prompt' => $prompt,
+                        'field' => $fieldName,
+                    ]);
                 }
             } else {
                 // Create default question if none provided
-                Question::firstOrCreate(
-                    ['tenant_id' => $tenant->id, 'prompt' => 'May I have your full name?'],
-                );
+                Question::create([
+                    'tenant_id' => $tenant->id,
+                    'prompt' => 'May I have your full name?',
+                    'field' => 'full_name',
+                ]);
             }
 
             DB::commit();
 
-            return redirect()->route('company.admin')->with('success', 'Tenant created successfully!');
+            // Redirect back to create form with success message
+            return redirect()->route('company.admin')->with('success', 'User and company created successfully!');
         } catch (\Exception $e) {
             DB::rollBack();
             // Log exception and show error (include message for local debugging)
             logger()->error('Tenant store failed: ' . $e->getMessage());
-            $message = env('APP_DEBUG', false) ? $e->getMessage() : 'Failed to create tenant.';
+            $message = env('APP_DEBUG', false) ? $e->getMessage() : 'Failed to create user and company.';
             return redirect()->back()->withInput()->with('error', $message);
         }
     }

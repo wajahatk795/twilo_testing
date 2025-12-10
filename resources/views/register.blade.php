@@ -37,58 +37,6 @@
               <div class="card-body p-5">
                   <img src="assets/images/logo1.png" class="mb-4" width="145" alt="">
 
-                  @if(isset($user_registered) && $user_registered)
-                    <!-- Show Company Creation Form -->
-                    <h4 class="fw-bold">Create Your Company</h4>
-                    <p class="mb-0">Add a company to get started</p>
-
-                    <div class="form-body my-4">
-                      <form class="row g-3" action="{{ route('auth.register.company') }}" method="POST">
-                        @csrf
-                        <div class="col-12">
-                          <label for="companyName" class="form-label">Company Name</label>
-                          <input type="text" class="form-control @error('company_name') is-invalid @enderror" id="companyName" name="company_name" placeholder="Your Company" value="{{ old('company_name') }}" required>
-                          @error('company_name')
-                            <div class="invalid-feedback d-block">{{ $message }}</div>
-                          @enderror
-                        </div>
-                        <div class="col-12">
-                          <label for="planSelect" class="form-label">Plan</label>
-                          <select class="form-select @error('plan') is-invalid @enderror" id="planSelect" name="plan" required>
-                            <option value="">Select Your Plan</option>
-                            <option value="Free" {{ old('plan') == 'Free' ? 'selected' : '' }}>Free</option>
-                            <option value="Pro" {{ old('plan') == 'Pro' ? 'selected' : '' }}>Pro</option>
-                            <option value="Enterprise" {{ old('plan') == 'Enterprise' ? 'selected' : '' }}>Enterprise</option>
-                          </select>
-                          @error('plan')
-                            <div class="invalid-feedback d-block">{{ $message }}</div>
-                          @enderror
-                        </div>
-                        <div class="col-12">
-                          <label class="form-label">Questions (Optional)</label>
-                          <div id="questions-container">
-                            <div class="question-row mb-2" style="display: flex; gap: 8px;">
-                              <input type="text" name="questions[]" class="form-control" placeholder="e.g. What is your full name?" />
-                              <button type="button" class="btn btn-sm btn-danger remove-question" style="display: none;">Remove</button>
-                            </div>
-                          </div>
-                          <div style="text-align: end">
-                            <button type="button" id="add-question" class="btn btn-sm btn-secondary mt-2">+ Add Question</button>
-                          </div>
-                        </div>
-                        <div class="col-12">
-                          <div class="d-grid">
-                            <button type="submit" class="btn btn-primary">Create Company</button>
-                          </div>
-                        </div>
-                        <div class="col-12">
-                          <div class="text-center">
-                            <p class="mb-0">Welcome, <strong>{{ $user->name ?? 'User' }}</strong>! Create your company to continue.</p>
-                          </div>
-                        </div>
-                      </form>
-                    </div>
-                  @else
                     <!-- Show User Registration Form -->
                     <h4 class="fw-bold">Get Started Now</h4>
                     <p class="mb-0">Enter your credentials to create your account</p>
@@ -98,7 +46,7 @@
                         @csrf
                         <div class="col-12">
                           <label for="inputUsername" class="form-label">Company Name</label>
-                          <input type="text" class="form-control @error('username') is-invalid @enderror" id="inputUsername" name="username" placeholder="Jhon" value="{{ old('username') }}" required>
+                          <input type="text" class="form-control @error('username') is-invalid @enderror" id="inputUsername" name="username" placeholder="Company Name" value="{{ old('username') }}" required>
                           @error('username')
                             <div class="invalid-feedback d-block">{{ $message }}</div>
                           @enderror
@@ -145,7 +93,6 @@
                         </div>
                       </form>
                     </div>
-                  @endif
 
 
               </div>

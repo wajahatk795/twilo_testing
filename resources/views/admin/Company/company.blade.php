@@ -16,7 +16,9 @@
                             <th>#</th>
                             <th>Company Name</th>
                             <th>Plan</th>
-                            <th>Actions</th>
+                            @if (Auth::user()->role_id === 1)
+                                <th>Actions</th>
+                            @endif
                         </tr>
                     </thead>
                     <tbody>
@@ -25,22 +27,24 @@
                                 <td>{{ $item->id }}</td>
                                 <td>{{ $item->company_name }}</td>
                                 <td>{{ $item->plan }}</td>
-                                <td>
-                                    <a href="{{ route('company.edit.admin', $item->id) }}">
-                                        <button class="btn btn-primary btn-sm">
-                                            <i class="fa fa-pencil-square-o" aria-hidden="true"></i> Edit
-                                        </button>
-                                    </a>
-                                    <form action="{{ route('company.destroy.admin', $item->id) }}" method="POST"
-                                        style="display:inline-block;">
-                                        @csrf
-                                        @method('DELETE')
-                                        <button type="submit" class="btn btn-danger btn-sm"
-                                            onclick="return confirm('Are you sure you want to delete this company?')">
-                                            <i class="fa fa-trash-o" aria-hidden="true"></i> Delete
-                                        </button>
-                                    </form>
-                                </td>
+                                @if (Auth::user()->role_id === 1)
+                                    <td>
+                                        <a href="{{ route('company.edit.admin', $item->id) }}">
+                                            <button class="btn btn-primary btn-sm">
+                                                <i class="fa fa-pencil-square-o" aria-hidden="true"></i> Edit
+                                            </button>
+                                        </a>
+                                        <form action="{{ route('company.destroy.admin', $item->id) }}" method="POST"
+                                            style="display:inline-block;">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" class="btn btn-danger btn-sm"
+                                                onclick="return confirm('Are you sure you want to delete this company?')">
+                                                <i class="fa fa-trash-o" aria-hidden="true"></i> Delete
+                                            </button>
+                                        </form>
+                                    </td>
+                                @endif
                             </tr>
                         @endforeach
                     </tbody>
@@ -49,7 +53,9 @@
                             <th>#</th>
                             <th>Company Name</th>
                             <th>Plan</th>
-                            <th>Actions</th>
+                            @if (Auth::user()->role_id === 1)
+                                <th>Actions</th>
+                            @endif
                         </tr>
                     </tfoot>
                 </table>
@@ -59,7 +65,6 @@
 @endsection
 
 @section('js')
-
     <script>
         $(document).ready(function() {
             var table = $('#tenants-table').DataTable({
@@ -76,11 +81,24 @@
                 },
                 // ensure search box and length selector are visible
                 dom: 'lfrtip',
-                columns: [
-                    { data: 'id', name: 'id' },
-                    { data: 'company_name', name: 'company_name' },
-                    { data: 'plan', name: 'plan' },
-                    { data: 'action', name: 'action', orderable: false, searchable: false }
+                columns: [{
+                        data: 'id',
+                        name: 'id'
+                    },
+                    {
+                        data: 'company_name',
+                        name: 'company_name'
+                    },
+                    {
+                        data: 'plan',
+                        name: 'plan'
+                    },
+                    {
+                        data: 'action',
+                        name: 'action',
+                        orderable: false,
+                        searchable: false
+                    }
                 ]
             });
         });
