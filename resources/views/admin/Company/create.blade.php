@@ -7,15 +7,38 @@
             <div class="card">
                 <div class="card-body p-4">
                     <h5 class="mb-4">Company Create</h5>
+
+                    @if ($errors->any())
+                        <div class="alert alert-danger">
+                            <ul class="mb-0">
+                                @foreach ($errors->all() as $error)
+                                    <li>{{ $error }}</li>
+                                @endforeach
+                            </ul>
+                        </div>
+                    @endif
+
+                    @if (session('success'))
+                        <div class="alert alert-success">{{ session('success') }}</div>
+                    @endif
+
+                    @if (session('error'))
+                        <div class="alert alert-danger">{{ session('error') }}</div>
+                    @endif
+
                     <form id="tenant-create-form" action="{{ route('tenants.store') }}" method="POST" class="row g-3">
                         @csrf
+                        {{-- Send owner_id as the current user id if present (safe) --}}
+                        @auth
+                            <input type="hidden" name="owner_id" value="{{ auth()->id() }}" />
+                        @endauth
                         <div class="col-md-6">
                             <label for="input25" class="form-label">Company Name</label>
                             <div class="input-group">
                                 <span class="input-group-text"><i
                                         class="material-icons-outlined fs-5">person_outline</i></span>
                                 <input type="text" name="company_name" class="form-control" id="input25"
-                                    placeholder="Company Name" required>
+                                    placeholder="Company Name" value="{{ old('company_name') }}" required>
                             </div>
                         </div>
                         <div class="col-md-6">
@@ -23,8 +46,8 @@
                             <div class="input-group">
                                 <span class="input-group-text"><i class="material-icons-outlined fs-5">science</i></span>
                                 <select class="form-select" id="input33" name="plan" required>
-                                    <option value="" selected>Select Your Plan</option>
-                                    <option value="Free">Free</option>
+                                    <option value="" {{ old('plan') === null ? 'selected' : '' }}>Select Your Plan</option>
+                                    <option value="Free" {{ old('plan') === 'Free' ? 'selected' : '' }}>Free</option>
                                 </select>
                             </div>
                         </div>

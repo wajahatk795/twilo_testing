@@ -4,8 +4,12 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 use App\Models\Tenant;
 use App\Models\Question;
+use Illuminate\Support\Str;
+use App\Models\User;
+use Yajra\DataTables\Facades\DataTables;
 
 class TenantController extends Controller
 {
@@ -43,8 +47,14 @@ class TenantController extends Controller
         ]);
         DB::beginTransaction();
         try {
+            // Determine owner_id: prefer the submitted non-empty value, otherwise use the authenticated user or null
+            $ownerId = $request->input('owner_id');
+            if ($ownerId === '' || $ownerId === null) {
+                $ownerId = Auth::check() ? Auth::id() : null;
+            }
+
             $tenant = Tenant::create([
-                'owner_id' => $request->owner_id,
+                'owner_id' => $ownerId,
                 'company_name' => $data['company_name'],
                 'plan' => $data['plan'],
                 'settings' => [
@@ -55,21 +65,26 @@ class TenantController extends Controller
             ]);
 
             // Create questions from submitted array or default
-            $submittedQuestions = array_filter($data['questions'] ?? []);
+            $submittedQuestions = array_values(array_filter($data['questions'] ?? []));
             
             if (! empty($submittedQuestions)) {
-                foreach ($submittedQuestions as $prompt) {
-                    Question::firstOrCreate([
-                        'tenant_id' => $tenant->id,
-                        'prompt' => $prompt,
-                    ]);
+                foreach ($submittedQuestions as $idx => $prompt) {
+                    $prompt = trim($prompt);
+                    if ($prompt === '') continue;
+                    // generate a safe field name from prompt (fallback to question_{n})
+                    $fieldName = Str::slug(substr($prompt, 0, 40));
+                    if ($fieldName === '') {
+                        $fieldName = 'question_' . ($idx + 1);
+                    }
+                    Question::firstOrCreate(
+                        ['tenant_id' => $tenant->id, 'prompt' => $prompt],
+                    );
                 }
             } else {
                 // Create default question if none provided
-                Question::firstOrCreate([
-                    'tenant_id' => $tenant->id,
-                    'prompt' => 'May I have your full name?',
-                ]);
+                Question::firstOrCreate(
+                    ['tenant_id' => $tenant->id, 'prompt' => 'May I have your full name?'],
+                );
             }
 
             DB::commit();
@@ -77,9 +92,10 @@ class TenantController extends Controller
             return redirect()->route('company.admin')->with('success', 'Tenant created successfully!');
         } catch (\Exception $e) {
             DB::rollBack();
-            // Log exception and show error
+            // Log exception and show error (include message for local debugging)
             logger()->error('Tenant store failed: ' . $e->getMessage());
-            return redirect()->back()->withInput()->with('error', 'Failed to create tenant.');
+            $message = env('APP_DEBUG', false) ? $e->getMessage() : 'Failed to create tenant.';
+            return redirect()->back()->withInput()->with('error', $message);
         }
     }
 
@@ -107,13 +123,20 @@ class TenantController extends Controller
             // Delete old questions and create new ones
             $tenant->questions()->delete();
 
-            $submittedQuestions = array_filter($data['questions'] ?? []);
+            $submittedQuestions = array_values(array_filter($data['questions'] ?? []));
             
             if (! empty($submittedQuestions)) {
-                foreach ($submittedQuestions as $prompt) {
+                foreach ($submittedQuestions as $idx => $prompt) {
+                    $prompt = trim($prompt);
+                    if ($prompt === '') continue;
+                    $fieldName = Str::slug(substr($prompt, 0, 40));
+                    if ($fieldName === '') {
+                        $fieldName = 'question_' . ($idx + 1);
+                    }
                     Question::create([
                         'tenant_id' => $tenant->id,
                         'prompt' => $prompt,
+                        'field' => $fieldName,
                     ]);
                 }
             } else {
@@ -121,6 +144,7 @@ class TenantController extends Controller
                 Question::create([
                     'tenant_id' => $tenant->id,
                     'prompt' => 'May I have your full name?',
+                    'field' => 'full_name',
                 ]);
             }
 

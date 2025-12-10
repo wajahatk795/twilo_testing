@@ -14,7 +14,6 @@ return new class extends Migration
         Schema::create('questions', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('tenant_id'); // linked to tenant
-            $table->string('field');
             $table->text('prompt');
             $table->timestamps();
 
