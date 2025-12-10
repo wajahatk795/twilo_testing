@@ -29,17 +29,6 @@
                         @csrf
                         
                         <!-- User Registration Fields -->
-                        <div class="col-md-6">
-                            <label for="username" class="form-label">Username</label>
-                            <div class="input-group">
-                                <span class="input-group-text"><i class="material-icons-outlined fs-5">person_outline</i></span>
-                                <input type="text" name="username" class="form-control @error('username') is-invalid @enderror" id="username"
-                                    placeholder="Username" value="{{ old('username') }}" required>
-                                @error('username')
-                                    <div class="invalid-feedback d-block">{{ $message }}</div>
-                                @enderror
-                            </div>
-                        </div>
 
                         <div class="col-md-6">
                             <label for="email" class="form-label">Email Address</label>

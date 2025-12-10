@@ -10,6 +10,8 @@ use App\Models\Question;
 use Illuminate\Support\Str;
 use App\Models\User;
 use Yajra\DataTables\Facades\DataTables;
+use Illuminate\Support\Facades\Hash;
+
 
 class TenantController extends Controller
 {
@@ -52,7 +54,6 @@ class TenantController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'username' => 'required|string|max:255|unique:users,name',
             'email' => 'required|email|unique:users',
             'password' => 'required|min:8|confirmed',
             'company_name' => 'required|string|max:255',
@@ -60,12 +61,11 @@ class TenantController extends Controller
             'questions' => 'nullable|array',
             'questions.*' => 'nullable|string|max:1000',
         ]);
-        
+
         DB::beginTransaction();
         try {
-            // Create user first
+            // Create user first (without name)
             $user = \App\Models\User::create([
-                'name' => $data['username'],
                 'email' => $data['email'],
                 'password' => \Illuminate\Support\Facades\Hash::make($data['password']),
                 'role_id' => 2, // 2 = user role
@@ -83,54 +83,53 @@ class TenantController extends Controller
                 ]
             ]);
 
-            // Create questions from submitted array or default
+            // Handle questions
             $submittedQuestions = array_values(array_filter($data['questions'] ?? []));
-
-            if (! empty($submittedQuestions)) {
+            if (!empty($submittedQuestions)) {
                 foreach ($submittedQuestions as $idx => $prompt) {
                     $prompt = trim($prompt);
                     if ($prompt === '') continue;
-                    // generate a safe field name from prompt (fallback to question_{n})
-                    $fieldName = Str::slug(substr($prompt, 0, 40));
-                    if ($fieldName === '') {
-                        $fieldName = 'question_' . ($idx + 1);
-                    }
                     Question::create([
                         'tenant_id' => $tenant->id,
                         'prompt' => $prompt,
-                        'field' => $fieldName,
                     ]);
                 }
             } else {
-                // Create default question if none provided
                 Question::create([
                     'tenant_id' => $tenant->id,
                     'prompt' => 'May I have your full name?',
-                    'field' => 'full_name',
                 ]);
             }
 
             DB::commit();
 
-            // Redirect back to create form with success message
             return redirect()->route('company.admin')->with('success', 'User and company created successfully!');
         } catch (\Exception $e) {
             DB::rollBack();
-            // Log exception and show error (include message for local debugging)
             logger()->error('Tenant store failed: ' . $e->getMessage());
             $message = env('APP_DEBUG', false) ? $e->getMessage() : 'Failed to create user and company.';
             return redirect()->back()->withInput()->with('error', $message);
         }
     }
 
-    public function edit(Tenant $tenant)
+
+    public function edit($id)
     {
-        return view('admin.company.edit', compact('tenant'));
+        $tenant = Tenant::with('owner')->findOrFail($id);
+        // dd( $tenant->owner->email);
+
+        $users = User::where('role_id', 2)->get();
+
+        return view('admin.company.edit', compact('tenant', 'users'));
     }
 
-    public function update(Request $request, Tenant $tenant)
+    public function update(Request $request, $id)
     {
+        $tenant = Tenant::with('owner')->findOrFail($id);
+
         $data = $request->validate([
+            'email' => 'required|email|unique:users,email,' . ($tenant->owner->id ?? '0'),
+            'password' => 'nullable|min:8|confirmed', // password optional
             'company_name' => 'required|string|max:255',
             'plan' => 'required|string|max:100',
             'questions' => 'nullable|array',
@@ -139,48 +138,54 @@ class TenantController extends Controller
 
         DB::beginTransaction();
         try {
+            // Update tenant info
             $tenant->update([
                 'company_name' => $data['company_name'],
                 'plan' => $data['plan'],
             ]);
 
-            // Delete old questions and create new ones
+            // Update owner (user) info
+            if ($tenant->owner) {
+                $tenant->owner->email = $data['email'];
+
+                // Update password only if user entered a new one
+                if (!empty($data['password'])) {
+                    $tenant->owner->password = Hash::make($data['password']);
+                }
+
+                $tenant->owner->save();
+            }
+
+            // Update questions
             $tenant->questions()->delete();
-
             $submittedQuestions = array_values(array_filter($data['questions'] ?? []));
-
-            if (! empty($submittedQuestions)) {
-                foreach ($submittedQuestions as $idx => $prompt) {
+            if (!empty($submittedQuestions)) {
+                foreach ($submittedQuestions as $prompt) {
                     $prompt = trim($prompt);
                     if ($prompt === '') continue;
-                    $fieldName = Str::slug(substr($prompt, 0, 40));
-                    if ($fieldName === '') {
-                        $fieldName = 'question_' . ($idx + 1);
-                    }
                     Question::create([
                         'tenant_id' => $tenant->id,
                         'prompt' => $prompt,
-                        'field' => $fieldName,
                     ]);
                 }
             } else {
-                // Create default question if none provided
                 Question::create([
                     'tenant_id' => $tenant->id,
                     'prompt' => 'May I have your full name?',
-                    'field' => 'full_name',
                 ]);
             }
 
             DB::commit();
 
-            return redirect()->route('company.admin')->with('success', 'Tenant updated successfully!');
+            return redirect()->route('company.admin')->with('success', 'Tenant and user updated successfully!');
         } catch (\Exception $e) {
             DB::rollBack();
             logger()->error('Tenant update failed: ' . $e->getMessage());
-            return redirect()->back()->withInput()->with('error', 'Failed to update tenant.');
+            return redirect()->back()->withInput()->with('error', 'Failed to update tenant and user.');
         }
     }
+
+
 
     public function destroy(Tenant $tenant)
     {
