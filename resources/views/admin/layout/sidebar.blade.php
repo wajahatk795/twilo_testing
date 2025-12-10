@@ -35,6 +35,21 @@
                         <div class="menu-title">Phone Numbers</div>
                     </a>
                 </li>
+                <li>
+                    <a href="{{ route('admin.lead.index') }}">
+                        <div class="parent-icon"><i class="fa-solid fa-flag"></i>
+                        </div>
+                        <div class="menu-title">Lead</div>
+                    </a>
+                </li>
+                
+                {{-- <li>
+                    <a href="{{ route('admin.call.index') }}">
+                        <div class="parent-icon"><i class="fa-solid fa-phone"></i>
+                        </div>
+                        <div class="menu-title">Calls</div>
+                    </a>
+                </li> --}}
 
             </ul>
             <!--end navigation-->

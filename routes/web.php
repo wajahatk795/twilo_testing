@@ -5,6 +5,8 @@ use Twilio\TwiML\VoiceResponse;
 use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\VoiceController;
 use App\Http\Controllers\PhoneNumberController;
+use App\Http\Controllers\leadController;
+use App\Http\Controllers\CallController;
 use App\Http\Controllers\Admin\AdminController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
@@ -26,6 +28,9 @@ Route::namespace('App\Http\Controllers\Admin')->middleware(\App\Http\Middleware\
     Route::post('admin/store', '\App\Http\Controllers\TenantController@store')->name('tenants.store');
 
     Route::get('/admin/phone-numbers', [PhoneNumberController::class, 'index'])->name('admin.phone-numbers.index');
+    Route::get('/admin/call', [CallController::class, 'index'])->name('admin.call.index');
+    Route::get('/admin/lead', [leadController::class, 'lead'])->name('admin.lead.index');
+    Route::get('/admin/lead/create', [leadController::class, 'create'])->name('admin.lead.create');
     Route::get('/admin/phone-numbers/data', [PhoneNumberController::class, 'getData'])->name('admin.phone-numbers.data');
     Route::get('/admin/phone-numbers/create', [PhoneNumberController::class, 'create'])->name('admin.phone-numbers.create');
     Route::post('/admin/phone-numbers', [PhoneNumberController::class, 'store'])->name('admin.phone-numbers.store');
