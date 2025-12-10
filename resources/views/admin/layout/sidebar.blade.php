@@ -43,13 +43,13 @@
                     </a>
                 </li>
                 
-                {{-- <li>
+                <li>
                     <a href="{{ route('admin.call.index') }}">
                         <div class="parent-icon"><i class="fa-solid fa-phone"></i>
                         </div>
                         <div class="menu-title">Calls</div>
                     </a>
-                </li> --}}
+                </li>
 
             </ul>
             <!--end navigation-->
