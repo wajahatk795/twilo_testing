@@ -28,6 +28,13 @@
                         <div class="menu-title">Company</div>
                     </a>
                 </li>
+                <li>
+                    <a href="{{ route('admin.phone-numbers.index') }}">
+                        <div class="parent-icon"><i class="fa-solid fa-phone"></i>
+                        </div>
+                        <div class="menu-title">Phone Numbers</div>
+                    </a>
+                </li>
 
             </ul>
             <!--end navigation-->

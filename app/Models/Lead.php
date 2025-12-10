@@ -6,12 +6,12 @@ use Illuminate\Database\Eloquent\Model;
 
 class Lead extends Model
 {
-    protected $fillable = ['tenant_id', 'name', 'email', 'phone', 'metadata', 'source'];
+    protected $fillable = ['user_id', 'name', 'email', 'phone', 'metadata', 'source'];
     protected $casts = ['metadata' => 'array'];
 
-    public function tenant()
+    public function user()
     {
-        return $this->belongsTo(Tenant::class);
+        return $this->belongsTo(User::class);
     }
     public function calls()
     {

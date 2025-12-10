@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use Twilio\TwiML\VoiceResponse;
 use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\VoiceController;
+use App\Http\Controllers\PhoneNumberController;
 use App\Http\Controllers\Admin\AdminController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
@@ -17,12 +18,20 @@ Route::namespace('App\Http\Controllers\Admin')->middleware(\App\Http\Middleware\
 
     Route::get('/admin', 'AdminController@dashboard')->name('admin.dashboard');
     Route::get('/admin/company', '\App\Http\Controllers\TenantController@index')->name('company.admin');
-    Route::get('/admin/company/{tenant}/edit', '\App\Http\Controllers\TenantController@edit')->name('company.edit.admin');
-    Route::put('/admin/company/{tenant}/edit', '\App\Http\Controllers\TenantController@update')->name('company.edit.admin');
+    Route::get('/admin/company/{id}/edit', '\App\Http\Controllers\TenantController@edit')->name('company.edit.admin');
+    Route::put('/admin/company/{id}/update', '\App\Http\Controllers\TenantController@update')->name('company.update.admin');
     Route::delete('admin/company/{tenant}', '\App\Http\Controllers\TenantController@destroy')->name('company.destroy.admin');
     Route::get('/tenants/data', '\App\Http\Controllers\TenantController@getData')->name('tenants.data');
     Route::get('admin/create', '\App\Http\Controllers\TenantController@create')->name('create.admin');
     Route::post('admin/store', '\App\Http\Controllers\TenantController@store')->name('tenants.store');
+
+    Route::get('/admin/phone-numbers', [PhoneNumberController::class, 'index'])->name('admin.phone-numbers.index');
+    Route::get('/admin/phone-numbers/data', [PhoneNumberController::class, 'getData'])->name('admin.phone-numbers.data');
+    Route::get('/admin/phone-numbers/create', [PhoneNumberController::class, 'create'])->name('admin.phone-numbers.create');
+    Route::post('/admin/phone-numbers', [PhoneNumberController::class, 'store'])->name('admin.phone-numbers.store');
+    Route::get('/admin/phone-numbers/{id}/edit', [PhoneNumberController::class, 'edit'])->name('admin.phone-numbers.edit');
+    Route::put('/admin/phone-numbers/{id}', [PhoneNumberController::class, 'update'])->name('admin.phone-numbers.update');
+    Route::delete('/admin/phone-numbers/{id}', [PhoneNumberController::class, 'destroy'])->name('admin.phone-numbers.destroy');
 
 
 });
