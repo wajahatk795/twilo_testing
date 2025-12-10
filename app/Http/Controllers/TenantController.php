@@ -22,11 +22,23 @@ class TenantController extends Controller
     }
     public function getData(Request $request)
     {
-        $users = User::select(['id', 'name', 'email', 'created_at']);
+        $tenants = Tenant::select(['id', 'company_name', 'plan', 'created_at']);
 
-        return DataTables::of($users)
-            ->addColumn('action', function ($user) {
-                return '<a href="' . route('users.edit', $user->id) . '" class="btn btn-sm btn-primary">Edit</a>';
+        return DataTables::of($tenants)
+            ->addColumn('action', function ($tenant) {
+
+                $edit = '<a href="' . route('company.edit.admin', $tenant->id) . '" 
+                            class="btn btn-sm btn-primary">Edit</a>';
+
+                $delete = '<form method="POST" action="' . route('company.destroy.admin', $tenant->id) . '" 
+                            style="display:inline-block;">
+                            ' . csrf_field() . '
+                            <input type="hidden" name="_method" value="DELETE">
+                            <button type="submit" class="btn btn-sm btn-danger"
+                                onclick="return confirm(\'Are you sure?\')">Delete</button>
+                        </form>';
+
+                return $edit . ' ' . $delete;
             })
             ->rawColumns(['action'])
             ->make(true);
@@ -66,7 +78,7 @@ class TenantController extends Controller
 
             // Create questions from submitted array or default
             $submittedQuestions = array_values(array_filter($data['questions'] ?? []));
-            
+
             if (! empty($submittedQuestions)) {
                 foreach ($submittedQuestions as $idx => $prompt) {
                     $prompt = trim($prompt);
@@ -124,7 +136,7 @@ class TenantController extends Controller
             $tenant->questions()->delete();
 
             $submittedQuestions = array_values(array_filter($data['questions'] ?? []));
-            
+
             if (! empty($submittedQuestions)) {
                 foreach ($submittedQuestions as $idx => $prompt) {
                     $prompt = trim($prompt);

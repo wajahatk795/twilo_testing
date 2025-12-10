@@ -20,17 +20,19 @@ Route::namespace('App\Http\Controllers\Admin')->middleware(\App\Http\Middleware\
     Route::get('/admin/company/{tenant}/edit', '\App\Http\Controllers\TenantController@edit')->name('company.edit.admin');
     Route::put('/admin/company/{tenant}/edit', '\App\Http\Controllers\TenantController@update')->name('company.edit.admin');
     Route::delete('admin/company/{tenant}', '\App\Http\Controllers\TenantController@destroy')->name('company.destroy.admin');
-    Route::get('users/data', '\App\Http\Controllers\TenantController@getData')->name('users.data');
+    Route::get('/tenants/data', '\App\Http\Controllers\TenantController@getData')->name('tenants.data');
     Route::get('admin/create', '\App\Http\Controllers\TenantController@create')->name('create.admin');
-    // Accept POST from the create form
     Route::post('admin/store', '\App\Http\Controllers\TenantController@store')->name('tenants.store');
+
+
 });
 
 // Authentication Routes
 Route::get('/login', [LoginController::class, 'showLogin'])->name('auth.login')->middleware('guest');
 Route::post('/login', [LoginController::class, 'login'])->name('auth.login.post');
 Route::get('/register', [RegisterController::class, 'showRegister'])->name('auth.register')->middleware('guest');
-Route::post('/register', [RegisterController::class, 'register'])->name('auth.register.post');
+Route::post('/register', [RegisterController::class, 'register'])->name('auth.register.post')->middleware('guest');
+Route::post('/register/company', [RegisterController::class, 'registerCompany'])->name('auth.register.company');
 Route::post('/logout', [LoginController::class, 'logout'])->name('auth.logout');
 
 // Route::post('/twilio/incoming', [VoiceController::class,'incoming'])->name('twilio.incoming');
