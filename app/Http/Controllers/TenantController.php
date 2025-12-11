@@ -67,8 +67,8 @@ class TenantController extends Controller
             // Create user first (without name)
             $user = \App\Models\User::create([
                 'email' => $data['email'],
-                'password' => \Illuminate\Support\Facades\Hash::make($data['password']),
-                'role_id' => 2, // 2 = user role
+                'password' => Hash::make($data['password']),
+                'role_id' => 2,
             ]);
 
             // Create company (tenant) for the new user

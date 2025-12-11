@@ -18,10 +18,17 @@ class DatabaseSeeder extends Seeder
         // User::factory(10)->create();
 
         User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
+            'name' => 'admin',
+            'email' => 'admin@gmail.com',
+            'role_id' => 1,
+            'password' => '$2a$12$zCgXt/LRkbfm4Aq8p5siG.VbBtRy8f0Pwky6JISvIu8/2UCMg7v7i',
         ]);
 
-        $this->call(\Database\Seeders\CallSeeder::class);
+
+        $this->call([
+            LeadSeeder::class,
+            TenantsSeeder::class,
+            CallSeeder::class,
+        ]);
     }
 }
