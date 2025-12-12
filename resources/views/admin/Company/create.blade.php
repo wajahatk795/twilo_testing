@@ -30,6 +30,7 @@
                         
                         <!-- User Registration Fields -->
 
+                        
                         <div class="col-md-6">
                             <label for="email" class="form-label">Email Address</label>
                             <div class="input-group">
