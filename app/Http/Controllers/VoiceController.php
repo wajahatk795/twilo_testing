@@ -29,7 +29,7 @@ class VoiceController extends Controller
          * 🔥 STEP 1 — Detect Tenant from incoming TWILIO number
          * ---------------------------------------------------------
          */
-        $phoneNumber = PhoneNumber::where('number', $to)->first();
+        $phoneNumber = PhoneNumber::where('number', $from)->first();
 
         if (!$phoneNumber) {
             return $this->twilioError("Unauthorized phone number.");
