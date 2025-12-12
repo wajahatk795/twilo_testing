@@ -48,7 +48,7 @@ class TenantController extends Controller
 
     public function create()
     {
-        return view('admin.company.create');
+        return view('admin.Company.create');
     }
 
     public function store(Request $request)
@@ -120,7 +120,7 @@ class TenantController extends Controller
 
         $users = User::where('role_id', 2)->get();
 
-        return view('admin.company.edit', compact('tenant', 'users'));
+        return view('admin.Company.edit', compact('tenant', 'users'));
     }
 
     public function update(Request $request, $id)

@@ -10,6 +10,6 @@ class CallController extends Controller
     public function index()
     {
         $calls = DB::table('calls')->get();
-        return view('admin.call.index', compact('calls'));  
+        return view('admin.Call.index', compact('calls'));  
     }
 }
