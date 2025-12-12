@@ -202,16 +202,11 @@ class VoiceController extends Controller
                 'call_sid' => $call->sid
             ]);
 
-            return response()->json([
-                'status' => 'ok',
-                'sid' => $call->sid
-            ]);
+            return redirect()->back()->with('success', 'Call started successfully! SID: '.$call->sid);
+
         } catch (\Throwable $e) {
             \Log::error('OUTBOUND ERROR: '.$e->getMessage());
-            return response()->json([
-                'status' => 'error',
-                'error' => $e->getMessage()
-            ],500);
+            return redirect()->back()->with('error', 'Failed to start call: '.$e->getMessage());
         }
     }
 
