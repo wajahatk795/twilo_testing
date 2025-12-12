@@ -5,179 +5,213 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Twilio\TwiML\VoiceResponse;
 use App\Models\SurveyCall;
+use App\Models\PhoneNumber;
+use App\Models\Tenant;
 use OpenAI\Laravel\Facades\OpenAI as OpenAIClient;
 
 class VoiceController extends Controller
 {
+    public function twilio()
+    {
+        return view('twilio.index');
+    }
+
     // Incoming call: create record (or find) and start at step 1
     public function incoming(Request $request)
     {
         \Log::info('TWILIO INCOMING', $request->all());
 
-        $sid  = $request->input('CallSid');
-        $from = $request->input('From');
+        $sid    = $request->input('CallSid');
+        $from   = $request->input('From');
+        $to     = $request->input('To');  // <---- TWILIO number called
 
+        /** ---------------------------------------------------------
+         * 🔥 STEP 1 — Detect Tenant from incoming TWILIO number
+         * ---------------------------------------------------------
+         */
+        $phoneNumber = PhoneNumber::where('number', $to)->first();
+
+        if (!$phoneNumber) {
+            return $this->twilioError("Unauthorized phone number.");
+        }
+
+        $tenantId = $phoneNumber->user->tenant_id ?? null;
+        $ivrFlow  = $phoneNumber->ivr_flow ?? []; // Custom questions per tenant
+
+        /** ---------------------------------------------------------
+         * 🔥 STEP 2 — Create (or find) SurveyCall tied to tenant
+         * ---------------------------------------------------------
+         */
         $call = SurveyCall::firstOrCreate(
             ['call_sid' => $sid],
             [
-                'phone' => $from,
-                'status' => 'started',
+                'tenant_id'  => $tenantId,
+                'phone'      => $from,
+                'status'     => 'started',
                 'current_step' => 1,
-                'conversation' => json_encode([['role'=>'system','content'=>'lead-capture session']])
+                'conversation' => json_encode([
+                    ['role'=>'system', 'content'=>'lead-capture session']
+                ]),
+                'ivr_flow'   => json_encode($ivrFlow),
             ]
         );
 
+        /** ---------------------------------------------------------
+         * 🔥 STEP 3 — Start call
+         * ---------------------------------------------------------
+         */
         $resp = new VoiceResponse();
-        $resp->say("Hi — thanks for taking this call. I have three quick questions.", ['voice' => 'Polly.Joanna']);
+        $resp->say("Hi — thanks for taking this call.", ['voice' => 'Polly.Joanna']);
         $resp->pause(['length' => 1]);
 
-        // Redirect to question route for the first step
         $resp->redirect(route('twilio.question', ['sid' => $sid]));
-        return response($resp, 200)->header('Content-Type', 'text/xml');
+        return $this->xml($resp);
     }
 
     // Show the current question for this call (one-by-one)
     public function question(Request $request)
     {
-        $sid = $request->input('sid');
+        $sid  = $request->input('sid');
         $call = SurveyCall::where('call_sid', $sid)->first();
 
         if (!$call) {
-            $resp = new VoiceResponse();
-            $resp->say("Call record error. Goodbye.", ['voice'=>'Polly.Joanna']);
-            $resp->hangup();
-            return response($resp,200)->header('Content-Type','text/xml');
+            return $this->twilioError("Call not found.");
         }
 
-        $step = (int)($call->current_step ?? 1);
-        $resp = new VoiceResponse();
+        /** Load dynamic questions from ivr_flow */
+        $ivr = json_decode($call->ivr_flow, true) ?? [];
 
-        // Prompts for each step
-        $prompts = [
-            1 => "Please tell me your full name after the beep.",
-            2 => "Please say your phone number, one digit at a time. For example: five five five one two three four five six seven.",
-            3 => "Please spell your email address slowly, one character at a time. For example: j o h n dot d o e at g m a i l dot c o m.",
+        // Default fallback questions if none set
+        $default = [
+            1 => "Please tell me your full name.",
+            2 => "Please say your phone number, one digit at a time.",
+            3 => "Please spell your email address."
         ];
 
+        $prompts = $ivr['questions'] ?? $default;
+
+        $step = (int) $call->current_step;
         $prompt = $prompts[$step] ?? "Thank you.";
+
+        $resp = new VoiceResponse();
 
         $g = $resp->gather([
             'input' => 'speech',
             'speechTimeout' => 'auto',
-            'timeout' => 8,
+            'timeout' => 7,
             'action' => route('twilio.handle', ['sid' => $sid]),
             'method' => 'POST',
         ]);
 
-        // Ask the step prompt inside gather so Twilio listens after speaking
         $g->say($prompt, ['voice' => 'Polly.Joanna']);
 
-        // Fallback if nothing captured — repeat same question
-        $resp->say("We didn't hear anything. Let's try again.", ['voice' => 'Polly.Joanna']);
-        $resp->redirect(route('twilio.question', ['sid' => $sid]));
+        $resp->say("Let's try again.", ['voice'=>'Polly.Joanna']);
+        $resp->redirect(route('twilio.question', ['sid'=>$sid]));
 
-        return response($resp,200)->header('Content-Type','text/xml');
+        return $this->xml($resp);
     }
 
     // Handle captured speech, use OpenAI to extract/normalize the single field for the current step
     public function handle(Request $request)
     {
         $sid    = $request->input('sid');
-        $speech = trim((string)$request->input('SpeechResult', ''));
-        \Log::info('TWILIO HANDLE', ['sid'=>$sid,'speech'=>$speech]);
+        $speech = trim($request->input('SpeechResult', ''));
 
         $call = SurveyCall::where('call_sid', $sid)->first();
         if (!$call) {
-            $resp = new VoiceResponse();
-            $resp->say("Call record missing. Goodbye.", ['voice'=>'Polly.Joanna']);
-            $resp->hangup();
-            return response($resp,200)->header('Content-Type','text/xml');
+            return $this->twilioError("Call not found.");
         }
 
-        $step = (int)($call->current_step ?? 1);
+        /** Load dynamic IVR flow */
+        $ivr = json_decode($call->ivr_flow, true) ?? [];
+        $defaultFields = [
+            1 => 'name',
+            2 => 'mobile',
+            3 => 'email',
+        ];
+        $fields = $ivr['fields'] ?? $defaultFields;
 
-        if (empty($speech)) {
-            // No speech captured — repeat question
-            $resp = new VoiceResponse();
-            $resp->say("I didn't catch that. Let's try again.", ['voice'=>'Polly.Joanna']);
-            $resp->redirect(route('twilio.question', ['sid' => $sid]));
-            return response($resp,200)->header('Content-Type','text/xml');
+        $step = $call->current_step;
+        $fieldName = $fields[$step] ?? null;
+
+        if (!$fieldName) {
+            return $this->twilioError("Invalid step.");
         }
 
-        // Save raw transcript for debugging
+        if (!$speech) {
+            return $this->repeatStep($sid, "I didn't catch that.");
+        }
+
         $this->saveRawSpeech($call, $step, $speech);
 
-        // Use OpenAI to extract a clean value for the current step
-        $fieldName = $this->stepFieldName($step);
-        $extracted = $this->openaiExtract($speech, $fieldName);
+        /** 🔥 extract clean field using AI */
+        $value = $this->openaiExtract($speech, $fieldName);
 
-        if ($extracted === null || $extracted === 'unknown') {
-            // Ask to repeat for this step if extraction failed
-            $resp = new VoiceResponse();
-            $resp->say("Sorry, I couldn't understand that clearly. Let's try that again.", ['voice'=>'Polly.Joanna']);
-            $resp->redirect(route('twilio.question', ['sid' => $sid]));
-            return response($resp,200)->header('Content-Type','text/xml');
+        if (!$value || $value === 'unknown') {
+            return $this->repeatStep($sid, "Sorry, I couldn't understand that.");
         }
 
-        // Persist the extracted value to DB
-        $updates = [];
+        /** Save field */
         if ($fieldName === 'mobile') {
-            $updates['mobile'] = preg_replace('/\D/', '', $extracted);
-        } elseif ($fieldName === 'email') {
-            $updates['email'] = $extracted;
-        } else {
-            $updates[$fieldName] = $extracted;
+            $value = preg_replace('/\D/', '', $value);
         }
-        $call->update($updates);
 
-        // Advance step
-        if ($step < 3) {
-            $call->current_step = $step + 1;
-            $call->save();
+        $call->update([$fieldName => $value]);
+
+        /** Move to next step */
+        if (isset($fields[$step + 1])) {
+            $call->update(['current_step' => $step + 1]);
 
             $resp = new VoiceResponse();
-            $resp->say("Thanks.", ['voice'=>'Polly.Joanna']);
-            $resp->pause(['length' => 0.5]);
+            $resp->say("Thank you.", ['voice' => 'Polly.Joanna']);
             $resp->redirect(route('twilio.question', ['sid' => $sid]));
-            return response($resp,200)->header('Content-Type','text/xml');
+
+            return $this->xml($resp);
         }
 
-        // Step 3 completed → finish
-        $call->status = 'complete';
-        $call->save();
+        /** Finish call */
+        $call->update(['status' => 'complete']);
 
         $resp = new VoiceResponse();
-        // Summarize captured fields (read digits for mobile)
-        $name = $call->name ?? 'not provided';
-        $mobile = $call->mobile ? implode(' ', str_split($call->mobile)) : 'not provided';
-        $email = $call->email ?? 'not provided';
-
-        // Use SSML for mobile digits
-        $resp->say("Thank you. I have recorded the following details.", ['voice'=>'Polly.Joanna']);
-        $resp->say("Name: $name.", ['voice'=>'Polly.Joanna']);
-        $resp->say("<speak>Phone: <say-as interpret-as=\"digits\">{$call->mobile}</say-as>.</speak>", ['voice'=>'Polly.Joanna']);
-        $resp->say("Email: $email.", ['voice'=>'Polly.Joanna']);
-        $resp->say("That's all—thanks for your time. Goodbye.", ['voice'=>'Polly.Joanna']);
+        $resp->say("Thanks. Your responses were recorded.", ['voice'=>'Polly.Joanna']);
         $resp->hangup();
 
-        return response($resp,200)->header('Content-Type','text/xml');
+        return $this->xml($resp);
     }
 
     // Outbound helper (keep available if you need it)
-    public function outbound($phone)
+    public function outbound(Request $request)
     {
+        $phone = $request->input('phone'); // <-- User manually types phone
+
+        $request->validate([
+            'phone'  => 'required',
+        ]);
+
         try {
             $twilio = new \Twilio\Rest\Client(env('TWILIO_SID'), env('TWILIO_TOKEN'));
+
             $call = $twilio->calls->create(
                 $phone,
                 env('TWILIO_NUMBER'),
                 ['url' => route('twilio.incoming')]
             );
-            SurveyCall::create(['phone' => $phone, 'call_sid' => $call->sid]);
-            return response()->json(['status'=>'ok','sid'=>$call->sid]);
+
+            SurveyCall::create([
+                'phone' => $phone,
+                'call_sid' => $call->sid
+            ]);
+
+            return response()->json([
+                'status' => 'ok',
+                'sid' => $call->sid
+            ]);
         } catch (\Throwable $e) {
             \Log::error('OUTBOUND ERROR: '.$e->getMessage());
-            return response()->json(['status'=>'error','error'=>$e->getMessage()],500);
+            return response()->json([
+                'status' => 'error',
+                'error' => $e->getMessage()
+            ],500);
         }
     }
 
@@ -254,5 +288,26 @@ class VoiceController extends Controller
         // name: keep as-is but remove extraneous quotes
         $name = trim($out, "\"' \t\n\r");
         return $name === '' ? 'unknown' : $name;
+    }
+
+    private function xml($resp)
+    {
+        return response($resp, 200)->header('Content-Type', 'text/xml');
+    }
+
+    private function twilioError($msg)
+    {
+        $resp = new VoiceResponse();
+        $resp->say($msg, ['voice'=>'Polly.Joanna']);
+        $resp->hangup();
+        return $this->xml($resp);
+    }
+
+    private function repeatStep($sid, $msg)
+    {
+        $resp = new VoiceResponse();
+        $resp->say($msg, ['voice'=>'Polly.Joanna']);
+        $resp->redirect(route('twilio.question', ['sid' => $sid]));
+        return $this->xml($resp);
     }
 }

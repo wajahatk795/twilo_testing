@@ -55,10 +55,11 @@ Route::post('/logout', [LoginController::class, 'logout'])->name('auth.logout');
 // Route::get('/call/{phone}',     [VoiceController::class,'outbound'])->name('twilio.outbound');
 // Route::post('/twilio/confirm', [VoiceController::class, 'confirm'])->name('twilio.confirm');
 
+Route::get('/twilio', [VoiceController::class, 'twilio'])->name('twilio.index');
 Route::post('/twilio/incoming', [VoiceController::class, 'incoming'])->name('twilio.incoming');
 Route::post('/twilio/question',  [VoiceController::class, 'question'])->name('twilio.question');
 Route::post('/twilio/handle',    [VoiceController::class, 'handle'])->name('twilio.handle');
-Route::post('/twilio/outbound/{phone}', [VoiceController::class, 'outbound'])->name('twilio.outbound');
+Route::post('/twilio/outbound', [VoiceController::class, 'outbound'])->name('twilio.outbound');
 
 
 // Route::get('/openai-test', [\App\Http\Controllers\VoiceController::class, 'openaiTest']);
