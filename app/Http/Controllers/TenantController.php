@@ -29,10 +29,10 @@ class TenantController extends Controller
         return DataTables::of($tenants)
             ->addColumn('action', function ($tenant) {
 
-                $edit = '<a href="' . route('company.edit.admin', $tenant->id) . '" 
+                $edit = '<a href="' . route('company.edit.admin', $tenant->id) . '"
                             class="btn btn-sm btn-primary">Edit</a>';
 
-                $delete = '<form method="POST" action="' . route('company.destroy.admin', $tenant->id) . '" 
+                $delete = '<form method="POST" action="' . route('company.destroy.admin', $tenant->id) . '"
                             style="display:inline-block;">
                             ' . csrf_field() . '
                             <input type="hidden" name="_method" value="DELETE">
@@ -48,6 +48,7 @@ class TenantController extends Controller
 
     public function create()
     {
+        dd(123);
         return view('admin.company.create');
     }
 
