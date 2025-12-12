@@ -22,7 +22,8 @@
         crossorigin="anonymous" referrerpolicy="no-referrer" />
     <link href="{{ asset('assets/plugins/datatable/css/dataTables.bootstrap5.min.css') }}" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css">
+    <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css">
     <!--main css-->
     <link href="{{ asset('assets/css/bootstrap-extended.css') }}" rel="stylesheet">
     <link href="{{ asset('sass/main.css') }}" rel="stylesheet">
@@ -32,23 +33,20 @@
     <link href="{{ asset('sass/responsive.css') }}" rel="stylesheet">
 
     @yield('css')
-
 </head>
 
 <body>
 
     @include('admin.layout.header')
     @include('admin.layout.sidebar')
+
     <div class="content">
         <style>
-            /* Ensure content sits below the fixed header and has comfortable padding */
             .content {
                 width: 84%;
                 margin-left: auto;
                 margin-top: 90px;
-                /* space for header height */
                 padding: 20px 24px;
-                /* breathing room inside content */
                 min-height: calc(100vh - 100px);
             }
 
@@ -60,135 +58,159 @@
                 }
             }
         </style>
-        
+
         @yield('content')
 
-        <!--start switcher-->
+        <!-- Theme Customizer Button -->
         <button class="btn btn-primary position-fixed bottom-0 end-0 m-3 d-flex align-items-center gap-2" type="button"
-            data-bs-toggle="offcanvas" data-bs-target="#staticBackdrop" style="margin-bottom: 50px !important">
-            <i class="material-icons-outlined">tune</i>Customize
+            data-bs-toggle="offcanvas" data-bs-target="#themeCustomizer" style="margin-bottom: 50px !important">
+            <i class="material-icons-outlined">tune</i> Customize
         </button>
 
-        <div class="offcanvas offcanvas-end" data-bs-scroll="true" tabindex="-1" id="staticBackdrop">
+        <!-- Offcanvas -->
+        <div class="offcanvas offcanvas-end" data-bs-scroll="true" tabindex="-1" id="themeCustomizer">
             <div class="offcanvas-header border-bottom h-70">
-                <div class="">
+                <div>
                     <h5 class="mb-0">Theme Customizer</h5>
                     <p class="mb-0">Customize your theme</p>
                 </div>
-                <a href="javascript:;" class="primaery-menu-close" data-bs-dismiss="offcanvas">
-                    <i class="material-icons-outlined">close</i>
-                </a>
+                <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
             </div>
             <div class="offcanvas-body">
-                <div>
-                    <p>Theme variation</p>
-
-                    <div class="row g-3">
-                        <div class="col-12 col-xl-6">
-                            <input type="radio" class="btn-check" name="theme-options" id="LightTheme" checked>
-                            <label
-                                class="btn btn-outline-secondary d-flex flex-column gap-1 align-items-center justify-content-center p-4"
-                                for="LightTheme">
-                                <span class="material-icons-outlined">light_mode</span>
-                                <span>Light</span>
-                            </label>
-                        </div>
-                        <div class="col-12 col-xl-6">
-                            <input type="radio" class="btn-check" name="theme-options" id="DarkTheme">
-                            <label
-                                class="btn btn-outline-secondary d-flex flex-column gap-1 align-items-center justify-content-center p-4"
-                                for="DarkTheme">
-                                <span class="material-icons-outlined">dark_mode</span>
-                                <span>Dark</span>
-                            </label>
-                        </div>
-                        <div class="col-12 col-xl-6">
-                            <input type="radio" class="btn-check" name="theme-options" id="SemiDarkTheme">
-                            <label
-                                class="btn btn-outline-secondary d-flex flex-column gap-1 align-items-center justify-content-center p-4"
-                                for="SemiDarkTheme">
-                                <span class="material-icons-outlined">contrast</span>
-                                <span>Semi Dark</span>
-                            </label>
-                        </div>
-                        <div class="col-12 col-xl-6">
-                            <input type="radio" class="btn-check" name="theme-options" id="BoderedTheme">
-                            <label
-                                class="btn btn-outline-secondary d-flex flex-column gap-1 align-items-center justify-content-center p-4"
-                                for="BoderedTheme">
-                                <span class="material-icons-outlined">border_style</span>
-                                <span>Bordered</span>
-                            </label>
-                        </div>
-                    </div><!--end row-->
-
+                <p>Theme Variation</p>
+                <div class="row g-3">
+                    <div class="col-12 col-xl-6">
+                        <input type="radio" class="btn-check" name="theme-options" id="LightTheme" data-theme="light">
+                        <label class="btn btn-outline-secondary w-100 p-4 d-flex flex-column align-items-center"
+                            for="LightTheme">
+                            <span class="material-icons-outlined">light_mode</span>
+                            Light
+                        </label>
+                    </div>
+                    <div class="col-12 col-xl-6">
+                        <input type="radio" class="btn-check" name="theme-options" id="DarkTheme" data-theme="dark">
+                        <label class="btn btn-outline-secondary w-100 p-4 d-flex flex-column align-items-center"
+                            for="DarkTheme">
+                            <span class="material-icons-outlined">dark_mode</span>
+                            Dark
+                        </label>
+                    </div>
+                    <div class="col-12 col-xl-6">
+                        <input type="radio" class="btn-check" name="theme-options" id="SemiDarkTheme"
+                            data-theme="semi-dark">
+                        <label class="btn btn-outline-secondary w-100 p-4 d-flex flex-column align-items-center"
+                            for="SemiDarkTheme">
+                            <span class="material-icons-outlined">contrast</span>
+                            Semi Dark
+                        </label>
+                    </div>
+                    <div class="col-12 col-xl-6">
+                        <input type="radio" class="btn-check" name="theme-options" id="BorderedTheme"
+                            data-theme="bordered">
+                        <label class="btn btn-outline-secondary w-100 p-4 d-flex flex-column align-items-center"
+                            for="BorderedTheme">
+                            <span class="material-icons-outlined">border_style</span>
+                            Bordered
+                        </label>
+                    </div>
                 </div>
             </div>
         </div>
-        <!--start switcher-->
     </div>
+
     @include('admin.layout.footer')
-
-
 
     <!--bootstrap js-->
     <script src="{{ asset('assets/js/bootstrap.bundle.min.js') }}"></script>
 
     <!--plugins-->
     <script src="{{ asset('assets/js/jquery.min.js') }}"></script>
-    <!--plugins-->
-    {{-- <script src="{{ asset('assets/plugins/perfect-scrollbar/js/perfect-scrollbar.js') }}"></script> --}}
     <script src="{{ asset('assets/plugins/metismenu/metisMenu.min.js') }}"></script>
-    {{-- <script src="{{ asset('assets/plugins/apexchart/apexcharts.min.js') }}"></script> --}}
     <script src="{{ asset('assets/plugins/peity/jquery.peity.min.js') }}"></script>
     <script src="{{ asset('assets/plugins/datatable/js/jquery.dataTables.min.js') }}"></script>
     <script src="{{ asset('assets/plugins/datatable/js/dataTables.bootstrap5.min.js') }}"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-    <script>
-        $(".data-attributes span").peity("donut")
-        </script>
     <script src="{{ asset('assets/plugins/simplebar/js/simplebar.min.js') }}"></script>
-    {{-- <script src="{{ asset('assets/js/main.js') }}"></script> --}}
-    {{-- <script src="{{ asset('assets/js/index.js') }}"></script> --}}
 
     <script>
-        // Success Message
-        @if(session('success'))
-            Swal.fire({
-                icon: 'success',
-                title: 'Success',
-                text: "{{ session('success') }}",
-            });
-        @endif
+        $(document).ready(function() {
+            // Peity Donut charts
+            $(".data-attributes span").peity("donut");
 
-        // Error Message
-        @if(session('error'))
-            Swal.fire({
-                icon: 'error',
-                title: 'Error',
-                text: "{{ session('error') }}",
-            });
-        @endif
+            // SweetAlert for session messages
+            @if (session('success'))
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Success',
+                    text: "{{ session('success') }}",
+                });
+            @endif
 
-        // Validator Errors
-        @if($errors->any())
-            let errorMessages = "";
-            @foreach($errors->all() as $error)
-                errorMessages += "• {{ $error }}\n";
-            @endforeach
+            @if (session('error'))
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: "{{ session('error') }}",
+                });
+            @endif
 
-            Swal.fire({
-                icon: 'error',
-                title: 'Validation Error',
-                html: errorMessages.replace(/\n/g, '<br>'),
+            // Validation Errors
+            @if ($errors->any())
+                let errorMessages = "";
+                @foreach ($errors->all() as $error)
+                    errorMessages += "• {{ $error }}<br>";
+                @endforeach
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Validation Error',
+                    html: errorMessages,
+                });
+            @endif
+
+            // Initialize Select2
+            $('.select2').select2({
+                theme: 'bootstrap-5'
             });
-        @endif
+
+
+        });
+
+    </script>
+    <script>
+        $(document).ready(function() {
+            const themeRadios = $('input[name="theme-options"]');
+
+            function applyTheme(theme) {
+                // Remove all classes first
+                document.documentElement.classList.remove('bordered-theme');
+                document.documentElement.removeAttribute('data-bs-theme');
+
+                // Apply selected theme
+                if (theme === 'light' || theme === 'dark' || theme === 'semi-dark') {
+                    document.documentElement.setAttribute('data-bs-theme', theme);
+                } else if (theme === 'bordered') {
+                    document.documentElement.classList.add('bordered-theme');
+                }
+
+                // Save theme in localStorage
+                localStorage.setItem('theme', theme);
+            }
+
+            // Load saved theme
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            applyTheme(savedTheme);
+            $('#' + savedTheme.charAt(0).toUpperCase() + savedTheme.slice(1) + 'Theme').prop('checked', true);
+
+            // On radio change
+            themeRadios.on('change', function() {
+                const theme = $(this).data('theme');
+                applyTheme(theme);
+            });
+        });
     </script>
 
-
     @yield('js')
-
 
 </body>
 

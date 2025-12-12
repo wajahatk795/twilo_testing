@@ -1,15 +1,22 @@
-[data-bs-theme=bodered-theme] body {
-  background-color: rgb(255, 255, 255);
+.bordered-theme body,
+.bordered-theme .content,
+.bordered-theme .card {
+    border: 1px solid #dee2e6;
+    border-radius: 0.5rem;
+    background-color: #f8f9fa;
 }
-[data-bs-theme=bodered-theme] body .top-header .navbar {
-  border-bottom: 1px solid #dee2e6;
-  box-shadow: none;
+
+.bordered-theme .top-header .navbar {
+    border-bottom: 1px solid #dee2e6;
+    box-shadow: none;
 }
-[data-bs-theme=bodered-theme] body .sidebar-wrapper {
-  border-right: 1px solid #dee2e6;
-  box-shadow: none;
+
+.bordered-theme .sidebar-wrapper {
+    border-right: 1px solid #dee2e6;
+    box-shadow: none;
 }
-[data-bs-theme=bodered-theme] body .card {
-  box-shadow: none;
-  border: 1px solid #dee2e6;
-}/*# sourceMappingURL=bordered-theme.css.map */
+
+.bordered-theme .card {
+    box-shadow: none;
+    border: 1px solid #dee2e6;
+}
