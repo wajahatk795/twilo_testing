@@ -150,7 +150,7 @@
         </script>
     <script src="{{ asset('assets/plugins/simplebar/js/simplebar.min.js') }}"></script>
     {{-- <script src="{{ asset('assets/js/main.js') }}"></script> --}}
-    <script src="{{ asset('assets/js/index.js') }}"></script>
+    {{-- <script src="{{ asset('assets/js/index.js') }}"></script> --}}
 
     <script>
         // Success Message
