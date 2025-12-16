@@ -41,25 +41,13 @@
     @include('admin.layout.sidebar')
 
     <div class="content">
-        <style>
-            .content {
-                width: 84%;
-                margin-left: auto;
-                margin-top: 90px;
-                padding: 20px 24px;
-                min-height: calc(100vh - 100px);
-            }
 
-            @media (max-width: 992px) {
-                .content {
-                    width: 100%;
-                    margin-left: 0;
-                    margin-top: 120px;
-                }
-            }
-        </style>
 
-        @yield('content')
+        <main class="main-wrapper extra-class">
+            <div class="main-content">
+                @yield('content')
+            </div>
+        </main>
 
         <!-- Theme Customizer Button -->
         <button class="btn btn-primary position-fixed bottom-0 end-0 m-3 d-flex align-items-center gap-2" type="button"
@@ -175,7 +163,6 @@
 
 
         });
-
     </script>
     <script>
         $(document).ready(function() {

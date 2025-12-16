@@ -7,6 +7,7 @@ use App\Http\Controllers\VoiceController;
 use App\Http\Controllers\PhoneNumberController;
 use App\Http\Controllers\leadController;
 use App\Http\Controllers\CallController;
+use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Admin\AdminController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
@@ -37,8 +38,9 @@ Route::namespace('App\Http\Controllers\Admin')->middleware(\App\Http\Middleware\
     Route::get('/admin/phone-numbers/{id}/edit', [PhoneNumberController::class, 'edit'])->name('admin.phone-numbers.edit');
     Route::put('/admin/phone-numbers/{id}', [PhoneNumberController::class, 'update'])->name('admin.phone-numbers.update');
     Route::delete('/admin/phone-numbers/{id}', [PhoneNumberController::class, 'destroy'])->name('admin.phone-numbers.destroy');
-
-
+    Route::get('/admin/profile', [ProfileController::class, 'profile'])->name('admin.profile.index');
+    Route::post('/profile/update', [ProfileController::class, 'updateProfile'])->name('profile.update');
+    Route::post('/profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password.update');
 });
 
 // Authentication Routes

@@ -50,6 +50,14 @@
                         <div class="menu-title">Calls</div>
                     </a>
                 </li>
+                
+                <li>
+                    <a href="{{ route('twilio.index') }}">
+                        <div class="parent-icon"><i class="fa-solid fa-bolt fs-4"></i>
+                        </div>
+                        <div class="menu-title">Instant Calls</div>
+                    </a>
+                </li>
 
             </ul>
             <!--end navigation-->
