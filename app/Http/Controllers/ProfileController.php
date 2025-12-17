@@ -18,10 +18,20 @@ class ProfileController extends Controller
     {
         $request->validate([
             'name' => 'required|string|max:255',
+            'image' => 'nullable|file',
         ]);
 
         $user = Auth::user();
         $user->name = $request->name;
+
+        // Image upload
+        if ($request->hasFile('image')) {
+            $file = $request->file('image');
+            $filename = time() . '_' . $file->getClientOriginalName(); // unique filename
+            $file->move(public_path('upload/profile'), $filename); // move to public/upload/profile
+            $user->image = 'upload/profile/' . $filename; // save path in DB
+        }
+
         $user->save();
 
         return back()->with('success', 'Profile updated successfully!');

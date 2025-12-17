@@ -11,9 +11,33 @@
                         <i class="fa-solid fa-user me-2"></i>
                         Profile Information
                     </h5>
-
-                    <form method="POST" action="{{ route('profile.update') }}">
+                    @php
+                        $user = DB::table('users')
+                            ->where('id', auth()->user()->id)
+                            ->first();
+                    @endphp
+                    <form method="POST" action="{{ route('profile.update') }}" enctype="multipart/form-data">
                         @csrf
+
+                        <!-- Image -->
+                        <div class="mb-3 text-center">
+                            <label class="form-label d-block">Profile Image</label>
+                            <div class="position-relative d-inline-block">
+                                <img src="{{ asset($user->image ?? 'assets/images/avatars/profile.jfif') }}" alt="Profile Image"
+                                    class="rounded-circle border"
+                                    style="width:120px; height:120px; object-fit:cover; cursor:pointer;">
+
+                                <input type="file" name="image" id="profile-image" class="form-control d-none"
+                                    accept="image/*">
+                                <span class="position-absolute bottom-0 end-0 bg-primary text-white rounded-circle p-2"
+                                    style="cursor:pointer;" onclick="document.getElementById('profile-image').click();">
+                                    <i class="fa-solid fa-camera"></i>
+                                </span>
+                            </div>
+                            @error('image')
+                                <div class="text-danger mt-1">{{ $message }}</div>
+                            @enderror
+                        </div>
 
                         <!-- Name -->
                         <div class="mb-3">
@@ -122,3 +146,19 @@
 
     </div>
 @endsection
+
+<script>
+    const profileImage = document.getElementById('profile-image');
+    const preview = document.getElementById('profile-preview');
+
+    profileImage.addEventListener('change', function() {
+        const file = this.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                preview.src = e.target.result;
+            }
+            reader.readAsDataURL(file);
+        }
+    });
+</script>
