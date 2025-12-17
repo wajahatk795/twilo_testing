@@ -25,9 +25,15 @@
                     <div class="dropdown-menu dropdown-user dropdown-menu-end shadow">
                         <a class="dropdown-item  gap-2 py-2" href="javascript:;">
                             <div class="text-center">
-                                <img src="{{ asset('assets/images/avatars/01.png') }}"
-                                    class="rounded-circle p-1 shadow mb-3" width="90" height="90" alt="">
-                                <h5 class="user-name mb-0 fw-bold">Hello, Jhon</h5>
+                                @if ($user && $user->image)
+                                    <img src="{{ asset($user->image) }}" class="rounded-circle p-1 shadow mb-3"
+                                        width="90" height="90" alt="">
+                                @else
+                                    <img src="{{ asset('assets/images/avatars/profile.jfif') }}"
+                                        class="rounded-circle p-1 shadow mb-3" width="90" height="90"
+                                        alt="">
+                                @endif
+                                <h5 class="user-name mb-0 fw-bold">Hello, {{$user->name}}</h5>
                             </div>
                         </a>
                         <hr class="dropdown-divider">
